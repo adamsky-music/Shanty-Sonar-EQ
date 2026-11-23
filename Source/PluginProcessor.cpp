@@ -8,20 +8,28 @@ ShantySonarEQProcessor::ShantySonarEQProcessor()
                      .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
-    profilePtr   = apvts.getRawParameterValue("profile");
-    phaseModePtr = apvts.getRawParameterValue("phase_mode");
-    impactPtr    = apvts.getRawParameterValue("sonar_impact");
-    smoothPtr    = apvts.getRawParameterValue("sonar_smooth");
-    adaptivePtr  = apvts.getRawParameterValue("sonar_adaptive");
-    minFreqPtr   = apvts.getRawParameterValue("sonar_min_freq");
-    maxFreqPtr   = apvts.getRawParameterValue("sonar_max_freq");
-    unmaskPtr    = apvts.getRawParameterValue("unmask_amt");
-    groupPtr     = apvts.getRawParameterValue("unmask_group");
-    priorityPtr  = apvts.getRawParameterValue("unmask_priority");
-    autoGainPtr  = apvts.getRawParameterValue("auto_gain");
-    mixPtr       = apvts.getRawParameterValue("mix");
-    outputGainPtr = apvts.getRawParameterValue("output_gain");
-    bypassPtr    = apvts.getRawParameterValue("bypass");
+    engineModePtr   = apvts.getRawParameterValue("engine_mode");
+    profilePtr      = apvts.getRawParameterValue("profile");
+    phaseModePtr    = apvts.getRawParameterValue("phase_mode");
+    impactPtr       = apvts.getRawParameterValue("sonar_impact");
+    smoothPtr       = apvts.getRawParameterValue("sonar_smooth");
+    adaptivePtr     = apvts.getRawParameterValue("sonar_adaptive");
+    minFreqPtr      = apvts.getRawParameterValue("sonar_min_freq");
+    maxFreqPtr      = apvts.getRawParameterValue("sonar_max_freq");
+    unmaskPtr       = apvts.getRawParameterValue("unmask_amt");
+    groupPtr        = apvts.getRawParameterValue("unmask_group");
+    priorityPtr     = apvts.getRawParameterValue("unmask_priority");
+    sootheDepthPtr  = apvts.getRawParameterValue("soothe_depth");
+    sootheSharpPtr  = apvts.getRawParameterValue("soothe_sharpness");
+    sootheSelectPtr = apvts.getRawParameterValue("soothe_selectivity");
+    sootheAtkPtr    = apvts.getRawParameterValue("soothe_attack");
+    sootheRelPtr    = apvts.getRawParameterValue("soothe_release");
+    sootheQualPtr   = apvts.getRawParameterValue("soothe_quality");
+    sootheDeltaPtr  = apvts.getRawParameterValue("soothe_delta");
+    autoGainPtr     = apvts.getRawParameterValue("auto_gain");
+    mixPtr          = apvts.getRawParameterValue("mix");
+    outputGainPtr   = apvts.getRawParameterValue("output_gain");
+    bypassPtr       = apvts.getRawParameterValue("bypass");
 
     for (int i = 0; i < ShantySonar::numBands; ++i)
     {
@@ -47,6 +55,10 @@ ShantySonarEQProcessor::ShantySonarEQProcessor()
 juce::AudioProcessorValueTreeState::ParameterLayout ShantySonarEQProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "engine_mode", "Engine Mode",
+        juce::StringArray { "Sonar (smart:EQ)", "Soothe (Resonance)" }, 0));
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "profile", "Source Profile",
@@ -78,6 +90,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout ShantySonarEQProcessor::crea
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "unmask_priority", "Track Priority",
         juce::StringArray { "Foreground", "Midground", "Background" }, 1));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_depth", "Soothe Depth", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 60.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_sharpness", "Soothe Sharpness", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 50.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_selectivity", "Soothe Selectivity", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 45.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_attack", "Soothe Attack", juce::NormalisableRange<float>(0.5f, 50.0f, 0.5f, 0.45f), 5.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_release", "Soothe Release", juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.45f), 80.0f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "soothe_quality", "Soothe Mode",
+        juce::StringArray { "Soft", "Hard" }, 0));
+    params.push_back(std::make_unique<juce::AudioParameterBool>("soothe_delta", "Delta Listen", false));
 
     params.push_back(std::make_unique<juce::AudioParameterBool>("auto_gain", "Auto-Gain", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -229,18 +256,25 @@ void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             sidechainBuf = &sc;
     }
 
-    // Update Sonar settings
+    // Update Sonar / Soothe settings
     ShantySonar::SonarEngineDSP::Settings sSettings;
-    sSettings.profile   = static_cast<ShantySonar::SourceProfile>(static_cast<int>(profilePtr->load()));
-    sSettings.phaseMode = static_cast<ShantySonar::PhaseMode>(static_cast<int>(phaseModePtr->load()));
-    sSettings.impact    = impactPtr->load() * 0.01f;
-    sSettings.smoothing = smoothPtr->load() * 0.01f;
-    sSettings.adaptive  = adaptivePtr->load() * 0.01f;
-    sSettings.minFreq   = minFreqPtr->load();
-    sSettings.maxFreq   = juce::jmax(sSettings.minFreq + 50.0f, maxFreqPtr->load());
-    sSettings.unmask    = unmaskPtr->load() * 0.01f;
-    sSettings.group     = static_cast<int>(groupPtr->load());
-    sSettings.priority  = static_cast<int>(priorityPtr->load());
+    sSettings.engineMode        = static_cast<ShantySonar::EngineMode>(static_cast<int>(engineModePtr->load()));
+    sSettings.profile           = static_cast<ShantySonar::SourceProfile>(static_cast<int>(profilePtr->load()));
+    sSettings.phaseMode         = static_cast<ShantySonar::PhaseMode>(static_cast<int>(phaseModePtr->load()));
+    sSettings.impact            = impactPtr->load() * 0.01f;
+    sSettings.smoothing         = smoothPtr->load() * 0.01f;
+    sSettings.adaptive          = adaptivePtr->load() * 0.01f;
+    sSettings.minFreq           = minFreqPtr->load();
+    sSettings.maxFreq           = juce::jmax(sSettings.minFreq + 50.0f, maxFreqPtr->load());
+    sSettings.unmask            = unmaskPtr->load() * 0.01f;
+    sSettings.group             = static_cast<int>(groupPtr->load());
+    sSettings.priority          = static_cast<int>(priorityPtr->load());
+    sSettings.sootheDepth       = sootheDepthPtr->load() * 0.01f;
+    sSettings.sootheSharpness   = sootheSharpPtr->load() * 0.01f;
+    sSettings.sootheSelectivity = sootheSelectPtr->load() * 0.01f;
+    sSettings.sootheAttackMs    = sootheAtkPtr->load();
+    sSettings.sootheReleaseMs   = sootheRelPtr->load();
+    sSettings.sootheQuality     = static_cast<ShantySonar::SootheQuality>(static_cast<int>(sootheQualPtr->load()));
     sonarEngine.updateSettings(sSettings);
 
     const int targetLatency = sonarEngine.getLatencySamples();
@@ -326,22 +360,23 @@ void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         autoGainLinear = 0.90f * autoGainLinear + 0.10f * 1.0f;
     }
 
-    // 5. Mix + Output Gain
+    // 5. Mix + Output Gain (or Delta Listen in Soothe mode)
     const float mix = mixPtr->load() * 0.01f;
     const float outGainLin = juce::Decibels::decibelsToGain(outputGainPtr->load()) * autoGainLinear;
+    const bool isDelta = (sSettings.engineMode == ShantySonar::EngineMode::Soothe) && (sootheDeltaPtr->load() > 0.5f);
 
     for (int i = 0; i < numSamples; ++i)
     {
         const int r = (dryDelayWritePos + i - dryDelaySamples + delayCap) % delayCap;
         const float dryL = dryDelayBuffer.getSample(0, r);
-        const float wetL = left[i] * outGainLin;
-        left[i] = dryL * (1.0f - mix) + wetL * mix;
+        const float wetL = isDelta ? (dryL - left[i]) : (left[i] * outGainLin);
+        left[i] = isDelta ? wetL : (dryL * (1.0f - mix) + wetL * mix);
 
         if (right != nullptr)
         {
             const float dryR = dryDelayBuffer.getSample(1, r);
-            const float wetR = right[i] * outGainLin;
-            right[i] = dryR * (1.0f - mix) + wetR * mix;
+            const float wetR = isDelta ? (dryR - right[i]) : (right[i] * outGainLin);
+            right[i] = isDelta ? wetR : (dryR * (1.0f - mix) + wetR * mix);
         }
     }
     dryDelayWritePos = (dryDelayWritePos + numSamples) % delayCap;
@@ -354,6 +389,7 @@ void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     outputLevelMeter.store(juce::jlimit(0.0f, 1.0f, finalRms * 2.5f), std::memory_order_relaxed);
     sonarActivityMeter.store(sSettings.impact * (sonarEngine.getHasLearned() ? 1.0f : sSettings.adaptive), std::memory_order_relaxed);
     unmaskActivityMeter.store(sSettings.unmask, std::memory_order_relaxed);
+    sootheReductionMeter.store(sonarEngine.getSootheReductionMeter(), std::memory_order_relaxed);
 }
 
 void ShantySonarEQProcessor::getStateInformation(juce::MemoryBlock& destData)

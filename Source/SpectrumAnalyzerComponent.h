@@ -345,6 +345,9 @@ private:
 
     void drawSmartCurve(juce::Graphics& g, const juce::Rectangle<float>& plot) const
     {
+        const bool isSoothe = (processor.apvts.getRawParameterValue("engine_mode")->load() > 0.5f);
+        const auto curveCol = isSoothe ? Palette::satAmber : Palette::sonarCyan;
+
         const float y0 = dbToY(0.0f, plot);
         juce::Path fill;
         juce::Path line;
@@ -362,9 +365,9 @@ private:
         fill.lineTo(plot.getRight(), y0);
         fill.closeSubPath();
 
-        g.setColour(Palette::sonarCyan.withAlpha(0.16f));
+        g.setColour(curveCol.withAlpha(isSoothe ? 0.20f : 0.16f));
         g.fillPath(fill);
-        g.setColour(Palette::sonarCyan);
+        g.setColour(curveCol);
         g.strokePath(line, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 

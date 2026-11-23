@@ -36,6 +36,18 @@ enum class TrackPriority
     Background
 };
 
+enum class EngineMode
+{
+    Sonar = 0,
+    Soothe
+};
+
+enum class SootheQuality
+{
+    Soft = 0,
+    Hard
+};
+
 // Process-wide lock-free-friendly hub for Cross-Channel / Track Unmasking across plugin instances
 class SharedSonarHub
 {
@@ -183,6 +195,8 @@ public:
         postSpectrumDb.fill(-90.0f);
         maskingSpectrumDb.fill(0.0f);
         scSpectrumDb.fill(-100.0f);
+        sootheEnvDb.fill(0.0f);
+        sootheReductionMeter.store(0.0f, std::memory_order_relaxed);
         hasSidechainSignal = false;
     }
 
@@ -191,11 +205,13 @@ public:
         learnedCurveDb.fill(0.0f);
         adaptiveCurveDb.fill(0.0f);
         finalSmartCurveDb.fill(0.0f);
+        sootheEnvDb.fill(0.0f);
         learnAccumDb.fill(0.0f);
         learnFrameCount = 0;
         isLearning.store(false, std::memory_order_relaxed);
         hasLearned.store(false, std::memory_order_relaxed);
         learnProgress.store(0.0f, std::memory_order_relaxed);
+        sootheReductionMeter.store(0.0f, std::memory_order_relaxed);
         resetBuffers();
     }
 
@@ -228,6 +244,7 @@ public:
 
     struct Settings
     {
+        EngineMode engineMode = EngineMode::Sonar;
         SourceProfile profile = SourceProfile::Universal;
         PhaseMode phaseMode = PhaseMode::ZeroLatency;
         float impact = 0.75f;     // 0..1
@@ -238,6 +255,14 @@ public:
         float unmask = 0.0f;      // 0..1
         int group = 0;            // 0=Off, 1..4
         int priority = 1;         // 0=FG, 1=MG, 2=BG
+
+        // Soothe3-style Dynamic Resonance Suppressor
+        float sootheDepth = 0.60f;       // 0..1
+        float sootheSharpness = 0.50f;   // 0..1
+        float sootheSelectivity = 0.45f; // 0..1
+        float sootheAttackMs = 5.0f;     // ms
+        float sootheReleaseMs = 80.0f;   // ms
+        SootheQuality sootheQuality = SootheQuality::Soft;
     };
 
     void updateSettings(const Settings& s)
@@ -324,6 +349,7 @@ public:
     bool getIsLearning() const noexcept { return isLearning.load(std::memory_order_relaxed); }
     bool getHasLearned() const noexcept { return hasLearned.load(std::memory_order_relaxed); }
     float getLearnProgress() const noexcept { return learnProgress.load(std::memory_order_relaxed); }
+    float getSootheReductionMeter() const noexcept { return sootheReductionMeter.load(std::memory_order_relaxed); }
 
     double getBinFreq(int b) const noexcept { return binFreqs[juce::jlimit(0, numBins - 1, b)]; }
 
@@ -563,44 +589,109 @@ private:
         std::array<float, numBins> localMasking {};
         localMasking.fill(0.0f);
 
-        for (int b = 0; b < numBins; ++b)
+        if (settings.engineMode == EngineMode::Soothe)
         {
-            const float target = getProfileTargetDb(settings.profile, binFreqs[b]) + dynOffset;
-            const float dynDiff = juce::jlimit(-10.0f, 10.0f, (target - instantDb[b]) * 0.55f);
-            adaptiveCurveDb[b] = 0.90f * adaptiveCurveDb[b] + 0.10f * dynDiff;
+            // oeksound soothe2/3-style Dynamic Spectral Resonance Suppressor
+            const int baseRadius = juce::jlimit(3, 14, static_cast<int>(std::round(14.0f - settings.sootheSharpness * 10.0f)));
+            const float threshDb = -1.5f + settings.sootheSelectivity * 9.5f;
+            const float hopSec = static_cast<float>(hopSize) / static_cast<float>(sampleRate);
+            const float atkCoeff = std::exp(-hopSec / juce::jmax(0.0005f, settings.sootheAttackMs * 0.001f));
+            const float relCoeff = std::exp(-hopSec / juce::jmax(0.005f, settings.sootheReleaseMs * 0.001f));
 
-            float base = hasLearned.load(std::memory_order_relaxed) ? learnedCurveDb[b] : 0.0f;
-            float combined = base + settings.adaptive * adaptiveCurveDb[b];
-
-            // Range mask (smooth 1/3-oct rolloff outside minFreq..maxFreq)
-            float rangeWeight = 1.0f;
-            if (binFreqs[b] < settings.minFreq)
-                rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(settings.minFreq / binFreqs[b]) * 1.5f);
-            else if (binFreqs[b] > settings.maxFreq)
-                rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(binFreqs[b] / settings.maxFreq) * 1.5f);
-
-            combined *= settings.impact * rangeWeight;
-
-            // Unmasking dip
-            float maskEnergy = -100.0f;
-            if (hasHubMask)
-                maskEnergy = juce::jmax(maskEnergy, hubMaskDb[b]);
-            if (hasSidechainSignal)
-                maskEnergy = juce::jmax(maskEnergy, scSpectrumDb[b]);
-
-            if (maskEnergy > -70.0f && settings.unmask > 0.001f)
+            float sumCut = 0.0f;
+            for (int b = 0; b < numBins; ++b)
             {
-                const float collision = juce::jlimit(0.0f, 12.0f, (maskEnergy - instantDb[b] + 10.0f) * 0.35f);
-                localMasking[b] = collision * settings.unmask;
-                combined -= localMasking[b] * rangeWeight;
+                // Local smoothed spectral baseline around band b
+                float sumW = 0.0f;
+                float sumVal = 0.0f;
+                const int bStart = juce::jmax(0, b - baseRadius);
+                const int bEnd   = juce::jmin(numBins - 1, b + baseRadius);
+                for (int j = bStart; j <= bEnd; ++j)
+                {
+                    const float dist = static_cast<float>(std::abs(j - b)) / static_cast<float>(baseRadius + 1);
+                    const float w = 1.0f - dist;
+                    sumVal += instantDb[j] * w;
+                    sumW += w;
+                }
+                const float localBaseline = (sumW > 0.0f) ? (sumVal / sumW) : instantDb[b];
+                const float prominence = instantDb[b] - localBaseline;
+                const float excess = juce::jmax(0.0f, prominence - threshDb);
+
+                float targetCutDb = 0.0f;
+                if (excess > 0.0f && instantDb[b] > -75.0f)
+                {
+                    if (settings.sootheQuality == SootheQuality::Soft)
+                        targetCutDb = -settings.sootheDepth * 18.0f * (excess / (excess + 5.5f));
+                    else
+                        targetCutDb = -settings.sootheDepth * juce::jmin(18.0f, excess * 1.65f);
+                }
+
+                float rangeWeight = 1.0f;
+                if (binFreqs[b] < settings.minFreq)
+                    rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(settings.minFreq / binFreqs[b]) * 1.5f);
+                else if (binFreqs[b] > settings.maxFreq)
+                    rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(binFreqs[b] / settings.maxFreq) * 1.5f);
+
+                targetCutDb *= rangeWeight;
+
+                // Envelope smoothing (more negative = deeper cut -> attack; recovering toward 0 -> release)
+                const float c = (targetCutDb < sootheEnvDb[b]) ? atkCoeff : relCoeff;
+                sootheEnvDb[b] = c * sootheEnvDb[b] + (1.0f - c) * targetCutDb;
+                workingSmart[b] = juce::jlimit(-18.0f, 0.0f, sootheEnvDb[b]);
+                sumCut += -workingSmart[b];
             }
 
-            workingSmart[b] = juce::jlimit(-15.0f, 15.0f, combined);
-        }
+            // Sharpness also controls curve smoothing (sharper = fewer smoothing passes)
+            const int sootheSmooth = juce::jlimit(0, 3, static_cast<int>(std::round((1.0f - settings.sootheSharpness) * 3.0f)));
+            if (sootheSmooth > 0)
+                smoothCurve(workingSmart, sootheSmooth);
 
-        const int smoothPasses = static_cast<int>(std::round(settings.smoothing * 6.0f));
-        if (smoothPasses > 0)
-            smoothCurve(workingSmart, smoothPasses);
+            sootheReductionMeter.store(juce::jlimit(0.0f, 1.0f, (sumCut / static_cast<float>(numBins)) * 0.25f),
+                                       std::memory_order_relaxed);
+        }
+        else
+        {
+            sootheReductionMeter.store(0.0f, std::memory_order_relaxed);
+
+            for (int b = 0; b < numBins; ++b)
+            {
+                const float target = getProfileTargetDb(settings.profile, binFreqs[b]) + dynOffset;
+                const float dynDiff = juce::jlimit(-10.0f, 10.0f, (target - instantDb[b]) * 0.55f);
+                adaptiveCurveDb[b] = 0.90f * adaptiveCurveDb[b] + 0.10f * dynDiff;
+
+                float base = hasLearned.load(std::memory_order_relaxed) ? learnedCurveDb[b] : 0.0f;
+                float combined = base + settings.adaptive * adaptiveCurveDb[b];
+
+                // Range mask (smooth 1/3-oct rolloff outside minFreq..maxFreq)
+                float rangeWeight = 1.0f;
+                if (binFreqs[b] < settings.minFreq)
+                    rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(settings.minFreq / binFreqs[b]) * 1.5f);
+                else if (binFreqs[b] > settings.maxFreq)
+                    rangeWeight = juce::jlimit(0.0f, 1.0f, 1.0f - std::log2(binFreqs[b] / settings.maxFreq) * 1.5f);
+
+                combined *= settings.impact * rangeWeight;
+
+                // Unmasking dip
+                float maskEnergy = -100.0f;
+                if (hasHubMask)
+                    maskEnergy = juce::jmax(maskEnergy, hubMaskDb[b]);
+                if (hasSidechainSignal)
+                    maskEnergy = juce::jmax(maskEnergy, scSpectrumDb[b]);
+
+                if (maskEnergy > -70.0f && settings.unmask > 0.001f)
+                {
+                    const float collision = juce::jlimit(0.0f, 12.0f, (maskEnergy - instantDb[b] + 10.0f) * 0.35f);
+                    localMasking[b] = collision * settings.unmask;
+                    combined -= localMasking[b] * rangeWeight;
+                }
+
+                workingSmart[b] = juce::jlimit(-15.0f, 15.0f, combined);
+            }
+
+            const int smoothPasses = static_cast<int>(std::round(settings.smoothing * 6.0f));
+            if (smoothPasses > 0)
+                smoothCurve(workingSmart, smoothPasses);
+        }
 
         // Linear Phase STFT filtering if active
         if (settings.phaseMode == PhaseMode::LinearPhase)
@@ -738,6 +829,8 @@ private:
     std::array<float, numBins> learnedCurveDb {};
     std::array<float, numBins> adaptiveCurveDb {};
     std::array<float, numBins> scSpectrumDb {};
+    std::array<float, numBins> sootheEnvDb {};
+    std::atomic<float> sootheReductionMeter { 0.0f };
 
     mutable std::mutex uiMutex;
     std::array<float, numBins> preSpectrumDb {};

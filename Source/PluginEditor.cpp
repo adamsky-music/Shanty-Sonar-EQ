@@ -14,9 +14,30 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     spectrum.onBandSelected = [this](int idx) { selectBand(idx); };
 
     // Top bar
+    modeSonarBtn.onClick = [this] {
+        if (auto* p = processor.apvts.getParameter("engine_mode"))
+            p->setValueNotifyingHost(0.0f);
+        updateModeVisibility();
+    };
+    modeSootheBtn.onClick = [this] {
+        if (auto* p = processor.apvts.getParameter("engine_mode"))
+            p->setValueNotifyingHost(1.0f);
+        updateModeVisibility();
+    };
+    addAndMakeVisible(modeSonarBtn);
+    addAndMakeVisible(modeSootheBtn);
+
     profileCombo.addItemList({ "Universal", "Vocals", "Drums", "Bass", "Guitar", "Keys / Synth", "Speech", "Master" }, 1);
     addAndMakeVisible(profileCombo);
     profileAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "profile", profileCombo);
+
+    sootheQualCombo.addItemList({ "Soft", "Hard" }, 1);
+    addAndMakeVisible(sootheQualCombo);
+    sootheQualAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "soothe_quality", sootheQualCombo);
+
+    sootheDeltaBtn.setClickingTogglesState(true);
+    addAndMakeVisible(sootheDeltaBtn);
+    sootheDeltaAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "soothe_delta", sootheDeltaBtn);
 
     phaseModeCombo.addItemList({ "Zero-Latency", "Linear Phase" }, 1);
     addAndMakeVisible(phaseModeCombo);
@@ -59,15 +80,27 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     setupKnob(smoothSlider, smoothLabel, "SMOOTH", "sonar");
     setupKnob(adaptiveSlider, adaptiveLabel, "ADAPTIVE", "tail");
     setupKnob(unmaskSlider, unmaskLabel, "UNMASK", "unmask");
+
+    setupKnob(sootheDepthSlider, sootheDepthLabel, "DEPTH", "amber");
+    setupKnob(sootheSharpSlider, sootheSharpLabel, "SHARP", "amber");
+    setupKnob(sootheSelectSlider, sootheSelectLabel, "SELECT", "tail");
+    setupKnob(sootheAtkSlider, sootheAtkLabel, "ATTACK", "amber");
+    setupKnob(sootheRelSlider, sootheRelLabel, "RELEASE", "amber");
+
     setupKnob(mixSlider, mixLabel, "MIX", "tail");
     setupKnob(outputSlider, outputLabel, "OUTPUT", "sonar", true);
 
-    impactAtt   = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_impact", impactSlider);
-    smoothAtt   = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_smooth", smoothSlider);
-    adaptiveAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_adaptive", adaptiveSlider);
-    unmaskAtt   = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "unmask_amt", unmaskSlider);
-    mixAtt      = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "mix", mixSlider);
-    outputAtt   = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "output_gain", outputSlider);
+    impactAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_impact", impactSlider);
+    smoothAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_smooth", smoothSlider);
+    adaptiveAtt     = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "sonar_adaptive", adaptiveSlider);
+    unmaskAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "unmask_amt", unmaskSlider);
+    sootheDepthAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_depth", sootheDepthSlider);
+    sootheSharpAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_sharpness", sootheSharpSlider);
+    sootheSelectAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_selectivity", sootheSelectSlider);
+    sootheAtkAtt    = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_attack", sootheAtkSlider);
+    sootheRelAtt    = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_release", sootheRelSlider);
+    mixAtt          = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "mix", mixSlider);
+    outputAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "output_gain", outputSlider);
 
     groupCombo.addItemList({ "Group: Off", "Group A", "Group B", "Group C", "Group D" }, 1);
     addAndMakeVisible(groupCombo);
@@ -113,6 +146,7 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     setupKnob(dynRelSlider, dynRelLabel, "RELEASE", "dyn");
 
     selectBand(0);
+    updateModeVisibility();
 
     setResizable(true, true);
     setResizeLimits(980, 640, 1600, 1050);
@@ -182,9 +216,42 @@ void ShantySonarEQEditor::selectBand(int bandIndex)
     repaint();
 }
 
+void ShantySonarEQEditor::updateModeVisibility()
+{
+    const bool isSoothe = (processor.apvts.getRawParameterValue("engine_mode")->load() > 0.5f);
+
+    profileCombo.setVisible(!isSoothe);
+    learnBtn.setVisible(!isSoothe);
+    clearLearnBtn.setVisible(!isSoothe);
+    impactSlider.setVisible(!isSoothe);   impactLabel.setVisible(!isSoothe);
+    smoothSlider.setVisible(!isSoothe);   smoothLabel.setVisible(!isSoothe);
+    adaptiveSlider.setVisible(!isSoothe); adaptiveLabel.setVisible(!isSoothe);
+    unmaskSlider.setVisible(!isSoothe);   unmaskLabel.setVisible(!isSoothe);
+    groupCombo.setVisible(!isSoothe);
+    priorityCombo.setVisible(!isSoothe);
+
+    sootheQualCombo.setVisible(isSoothe);
+    sootheDeltaBtn.setVisible(isSoothe);
+    sootheDepthSlider.setVisible(isSoothe);  sootheDepthLabel.setVisible(isSoothe);
+    sootheSharpSlider.setVisible(isSoothe);  sootheSharpLabel.setVisible(isSoothe);
+    sootheSelectSlider.setVisible(isSoothe); sootheSelectLabel.setVisible(isSoothe);
+    sootheAtkSlider.setVisible(isSoothe);    sootheAtkLabel.setVisible(isSoothe);
+    sootheRelSlider.setVisible(isSoothe);    sootheRelLabel.setVisible(isSoothe);
+
+    modeSonarBtn.setColour(juce::TextButton::buttonColourId,
+                           !isSoothe ? ShantySonar::Palette::sonarCyan.withAlpha(0.32f) : ShantySonar::Palette::bgPanel);
+    modeSootheBtn.setColour(juce::TextButton::buttonColourId,
+                            isSoothe ? ShantySonar::Palette::satAmber.withAlpha(0.32f) : ShantySonar::Palette::bgPanel);
+    repaint();
+}
+
 void ShantySonarEQEditor::timerCallback()
 {
     spectrum.updateData();
+
+    const bool isSoothe = (processor.apvts.getRawParameterValue("engine_mode")->load() > 0.5f);
+    if (profileCombo.isVisible() == isSoothe)
+        updateModeVisibility();
 
     const bool learning = processor.getIsLearning();
     const bool learned  = processor.getHasLearned();
@@ -229,7 +296,9 @@ void ShantySonarEQEditor::timerCallback()
                            processor.sonarActivityMeter.load(std::memory_order_relaxed),
                            processor.unmaskActivityMeter.load(std::memory_order_relaxed),
                            learning,
-                           learned);
+                           learned,
+                           isSoothe,
+                           processor.sootheReductionMeter.load(std::memory_order_relaxed));
 }
 
 void ShantySonarEQEditor::paint(juce::Graphics& g)
@@ -248,12 +317,14 @@ void ShantySonarEQEditor::paint(juce::Graphics& g)
     if (adamskyLogo.isValid())
         g.drawImageWithin(adamskyLogo, 12, 8, 36, 36, juce::RectanglePlacement::centred);
 
+    const bool isSoothe = (processor.apvts.getRawParameterValue("engine_mode")->load() > 0.5f);
     g.setColour(ShantySonar::Palette::textPrimary);
     g.setFont(juce::Font(17.0f, juce::Font::bold));
     g.drawText("SHANTY SONAR EQ", 56, 8, 200, 22, juce::Justification::left);
-    g.setColour(ShantySonar::Palette::sonarCyan);
+    g.setColour(isSoothe ? ShantySonar::Palette::satAmber : ShantySonar::Palette::sonarCyan);
     g.setFont(juce::Font(10.5f, juce::Font::bold));
-    g.drawText("ADAPTIVE SPECTRAL & UNMASKING EQ", 56, 29, 230, 14, juce::Justification::left);
+    g.drawText(isSoothe ? "DYNAMIC RESONANCE SUPPRESSOR" : "ADAPTIVE SPECTRAL & UNMASKING EQ",
+               56, 29, 230, 14, juce::Justification::left);
 
     // Right sidebar panel background
     const int sideW = 248;
@@ -283,10 +354,16 @@ void ShantySonarEQEditor::resized()
     const int h = getHeight();
 
     // Top bar layout
-    int tx = 290;
-    profileCombo.setBounds(tx, 12, 130, 28); tx += 136;
-    learnBtn.setBounds(tx, 12, 92, 28); tx += 96;
-    clearLearnBtn.setBounds(tx, 12, 42, 28); tx += 52;
+    int tx = 272;
+    modeSonarBtn.setBounds(tx, 12, 64, 28); tx += 66;
+    modeSootheBtn.setBounds(tx, 12, 68, 28); tx += 76;
+
+    profileCombo.setBounds(tx, 12, 120, 28);
+    learnBtn.setBounds(tx + 126, 12, 84, 28);
+    clearLearnBtn.setBounds(tx + 214, 12, 38, 28);
+
+    sootheQualCombo.setBounds(tx, 12, 92, 28);
+    sootheDeltaBtn.setBounds(tx + 98, 12, 70, 28);
 
     phaseModeCombo.setBounds(w - 384, 12, 118, 28);
     slotABtn.setBounds(w - 258, 12, 30, 28);
@@ -314,6 +391,7 @@ void ShantySonarEQEditor::resized()
         s.setBounds(x, y + 12, width, height - 12);
     };
 
+    const int sonarStartKy = ky;
     placeKnob(impactSlider, impactLabel, sx + 6, ky, kw, kh);
     placeKnob(smoothSlider, smoothLabel, sx + 12 + kw, ky, kw, kh);
     ky += kh + 2;
@@ -325,6 +403,16 @@ void ShantySonarEQEditor::resized()
     groupCombo.setBounds(sx + 8, ky, (sideW - 22) / 2, 24);
     priorityCombo.setBounds(sx + 14 + (sideW - 22) / 2, ky, (sideW - 22) / 2, 24);
     ky += 30;
+
+    // Soothe knobs occupy the same sidebar region when Soothe mode is active
+    int sky = sonarStartKy;
+    const int kw3 = (sideW - 24) / 3;
+    placeKnob(sootheDepthSlider, sootheDepthLabel, sx + 6, sky, kw, kh);
+    placeKnob(sootheSharpSlider, sootheSharpLabel, sx + 12 + kw, sky, kw, kh);
+    sky += kh + 2;
+    placeKnob(sootheSelectSlider, sootheSelectLabel, sx + 6, sky, kw3, kh);
+    placeKnob(sootheAtkSlider, sootheAtkLabel, sx + 12 + kw3, sky, kw3, kh);
+    placeKnob(sootheRelSlider, sootheRelLabel, sx + 18 + kw3 * 2, sky, kw3, kh);
 
     const int remH = juce::jmax(58, (60 + mainH) - ky - 6);
     placeKnob(mixSlider, mixLabel, sx + 6, ky, kw, juce::jmin(72, remH));

@@ -69,6 +69,7 @@ public:
     std::atomic<float> outputLevelMeter { 0.0f };
     std::atomic<float> sonarActivityMeter { 0.0f };
     std::atomic<float> unmaskActivityMeter { 0.0f };
+    std::atomic<float> sootheReductionMeter { 0.0f };
 
     static juce::String bandParamID(int bandIndex, const char* suffix)
     {
@@ -112,6 +113,7 @@ private:
 
     std::array<BandParamPtrs, ShantySonar::numBands> bandPtrs;
 
+    std::atomic<float>* engineModePtr = nullptr;
     std::atomic<float>* profilePtr = nullptr;
     std::atomic<float>* phaseModePtr = nullptr;
     std::atomic<float>* impactPtr = nullptr;
@@ -122,6 +124,13 @@ private:
     std::atomic<float>* unmaskPtr = nullptr;
     std::atomic<float>* groupPtr = nullptr;
     std::atomic<float>* priorityPtr = nullptr;
+    std::atomic<float>* sootheDepthPtr = nullptr;
+    std::atomic<float>* sootheSharpPtr = nullptr;
+    std::atomic<float>* sootheSelectPtr = nullptr;
+    std::atomic<float>* sootheAtkPtr = nullptr;
+    std::atomic<float>* sootheRelPtr = nullptr;
+    std::atomic<float>* sootheQualPtr = nullptr;
+    std::atomic<float>* sootheDeltaPtr = nullptr;
     std::atomic<float>* autoGainPtr = nullptr;
     std::atomic<float>* mixPtr = nullptr;
     std::atomic<float>* outputGainPtr = nullptr;

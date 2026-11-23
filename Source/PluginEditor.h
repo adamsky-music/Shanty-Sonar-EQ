@@ -31,19 +31,25 @@ private:
     ShantySonar::ShantyMascotComponent mascot;
 
     // Top bar
-    juce::ComboBox profileCombo, phaseModeCombo;
+    juce::TextButton modeSonarBtn { "SONAR" };
+    juce::TextButton modeSootheBtn { "SOOTHE" };
+    juce::ComboBox profileCombo, phaseModeCombo, sootheQualCombo;
     juce::TextButton learnBtn { "LEARN" };
     juce::TextButton clearLearnBtn { "CLR" };
+    juce::TextButton sootheDeltaBtn { "DELTA" };
     juce::TextButton slotABtn { "A" };
     juce::TextButton slotBBtn { "B" };
     juce::TextButton autoGainBtn { "AUTO GAIN" };
     juce::TextButton bypassBtn { "BYPASS" };
 
-    // Right sidebar: Smart Sonar & Unmasking & Output
+    // Right sidebar: Smart Sonar & Unmasking & Soothe & Output
     juce::Slider impactSlider, smoothSlider, adaptiveSlider, unmaskSlider;
     juce::Label impactLabel, smoothLabel, adaptiveLabel, unmaskLabel;
     juce::ComboBox groupCombo, priorityCombo;
-    juce::Label groupLabel, priorityLabel;
+
+    juce::Slider sootheDepthSlider, sootheSharpSlider, sootheSelectSlider, sootheAtkSlider, sootheRelSlider;
+    juce::Label sootheDepthLabel, sootheSharpLabel, sootheSelectLabel, sootheAtkLabel, sootheRelLabel;
+
     juce::Slider mixSlider, outputSlider;
     juce::Label mixLabel, outputLabel;
 
@@ -61,10 +67,13 @@ private:
     juce::Slider dynThreshSlider, dynRangeSlider, dynAtkSlider, dynRelSlider;
     juce::Label dynThreshLabel, dynRangeLabel, dynAtkLabel, dynRelLabel;
 
+    void updateModeVisibility();
+
     // Global APVTS Attachments
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> profileAtt, phaseModeAtt, groupAtt, priorityAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> profileAtt, phaseModeAtt, groupAtt, priorityAtt, sootheQualAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> impactAtt, smoothAtt, adaptiveAtt, unmaskAtt, mixAtt, outputAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt, bypassAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sootheDepthAtt, sootheSharpAtt, sootheSelectAtt, sootheAtkAtt, sootheRelAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt, bypassAtt, sootheDeltaAtt;
 
     // Per-band dynamic APVTS Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bandEnabledAtt, dynEnabledAtt;

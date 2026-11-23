@@ -20,13 +20,16 @@ public:
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
     }
 
-    void updateAnimation(float audioLevel, float sonarActivity, float unmaskActivity, bool learning, bool learned)
+    void updateAnimation(float audioLevel, float sonarActivity, float unmaskActivity, bool learning, bool learned,
+                         bool sootheMode = false, float sootheReduction = 0.0f)
     {
         currentAudio  = juce::jlimit(0.0f, 1.0f, audioLevel);
         currentSonar  = juce::jlimit(0.0f, 1.0f, sonarActivity);
         currentUnmask = juce::jlimit(0.0f, 1.0f, unmaskActivity);
-        isLearningNow = learning;
-        hasLearnedNow = learned;
+        isLearningNow = learning && !sootheMode;
+        hasLearnedNow = learned && !sootheMode;
+        isSootheMode  = sootheMode;
+        currentSoothe = juce::jlimit(0.0f, 1.0f, sootheReduction);
         animTimeSec += 1.0f / 60.0f;
 
         lickTimer -= 1.0f / 60.0f;
@@ -115,16 +118,19 @@ public:
                                               drawArea.getCentreY() - destH * 0.5f,
                                               destW, destH);
 
-        // Stage glow reacting to Sonar & Audio
+        // Stage glow reacting to Sonar / Soothe & Audio
         {
             const float bgCx = destRect.getCentreX();
             const float bgCy = destRect.getCentreY() + destRect.getHeight() * 0.04f;
             const float bgR  = destRect.getWidth() * 0.58f;
-            const auto baseCol = isLearningNow
-                ? Palette::sonarCyan
-                : (hasLearnedNow ? Palette::emeraldOk.interpolatedWith(Palette::sonarCyan, 0.5f) : Palette::tailCyan);
+            const auto baseCol = isSootheMode
+                ? Palette::satAmber.interpolatedWith(Palette::tailCyan, 0.25f)
+                : (isLearningNow
+                    ? Palette::sonarCyan
+                    : (hasLearnedNow ? Palette::emeraldOk.interpolatedWith(Palette::sonarCyan, 0.5f) : Palette::tailCyan));
+            const float activity = isSootheMode ? juce::jmax(currentAudio, currentSoothe) : juce::jmax(currentAudio, currentSonar);
             const auto glowCol = baseCol.interpolatedWith(Palette::teethRed, currentUnmask * 0.45f)
-                                        .withAlpha(0.14f + 0.25f * juce::jmax(currentAudio, currentSonar));
+                                        .withAlpha(0.14f + 0.26f * activity);
             juce::ColourGradient stageGlow(glowCol, bgCx, bgCy,
                                            juce::Colours::transparentBlack, bgCx + bgR, bgCy, true);
             g.setGradientFill(stageGlow);
@@ -292,8 +298,10 @@ private:
     float currentAudio  = 0.0f;
     float currentSonar  = 0.0f;
     float currentUnmask = 0.0f;
+    float currentSoothe = 0.0f;
     bool isLearningNow  = false;
     bool hasLearnedNow  = false;
+    bool isSootheMode   = false;
     float animTimeSec   = 0.0f;
 
     float lickTimer = 1.2f;
