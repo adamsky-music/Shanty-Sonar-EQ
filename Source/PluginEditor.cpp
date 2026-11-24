@@ -75,6 +75,15 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     addAndMakeVisible(bypassBtn);
     bypassAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "bypass", bypassBtn);
 
+    manualBtn.setTooltip("Open Manual / Руководство");
+    manualBtn.onClick = [this] {
+        manualOverlay.setVisible(!manualOverlay.isVisible());
+        manualOverlay.toFront(true);
+    };
+    addAndMakeVisible(manualBtn);
+
+    addChildComponent(manualOverlay);
+
     // Right sidebar knobs
     setupKnob(impactSlider, impactLabel, "IMPACT", "sonar");
     setupKnob(smoothSlider, smoothLabel, "SMOOTH", "sonar");
@@ -365,11 +374,12 @@ void ShantySonarEQEditor::resized()
     sootheQualCombo.setBounds(tx, 12, 92, 28);
     sootheDeltaBtn.setBounds(tx + 98, 12, 70, 28);
 
-    phaseModeCombo.setBounds(w - 384, 12, 118, 28);
-    slotABtn.setBounds(w - 258, 12, 30, 28);
-    slotBBtn.setBounds(w - 226, 12, 30, 28);
-    autoGainBtn.setBounds(w - 188, 12, 86, 28);
-    bypassBtn.setBounds(w - 94, 12, 82, 28);
+    phaseModeCombo.setBounds(w - 414, 12, 114, 28);
+    slotABtn.setBounds(w - 292, 12, 30, 28);
+    slotBBtn.setBounds(w - 260, 12, 30, 28);
+    autoGainBtn.setBounds(w - 222, 12, 84, 28);
+    bypassBtn.setBounds(w - 130, 12, 78, 28);
+    manualBtn.setBounds(w - 44, 12, 32, 28);
 
     const int sideW = 248;
     const int bottomH = 166;
@@ -453,4 +463,6 @@ void ShantySonarEQEditor::resized()
     placeKnob(dynRangeSlider, dynRangeLabel, dStart + dKw + 4, knobY, dKw, knobH);
     placeKnob(dynAtkSlider, dynAtkLabel, dStart + (dKw + 4) * 2, knobY, dKw, knobH);
     placeKnob(dynRelSlider, dynRelLabel, dStart + (dKw + 4) * 3, knobY, dKw, knobH);
+
+    manualOverlay.setBounds(getLocalBounds());
 }

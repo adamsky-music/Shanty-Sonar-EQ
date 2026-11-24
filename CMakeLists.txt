@@ -50,6 +50,7 @@ target_sources(ShantySonarEQ
         Source/SpectrumAnalyzerComponent.h
         Source/CustomLookAndFeel.h
         Source/ShantyMascot.h
+        Source/ManualOverlayComponent.h
 )
 
 target_compile_definitions(ShantySonarEQ

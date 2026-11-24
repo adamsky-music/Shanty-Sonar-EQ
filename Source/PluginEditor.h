@@ -5,6 +5,7 @@
 #include "CustomLookAndFeel.h"
 #include "ShantyMascot.h"
 #include "SpectrumAnalyzerComponent.h"
+#include "ManualOverlayComponent.h"
 #include <array>
 #include <memory>
 
@@ -41,6 +42,9 @@ private:
     juce::TextButton slotBBtn { "B" };
     juce::TextButton autoGainBtn { "AUTO GAIN" };
     juce::TextButton bypassBtn { "BYPASS" };
+    juce::TextButton manualBtn { "?" };
+
+    ShantySonar::ManualOverlayComponent manualOverlay;
 
     // Right sidebar: Smart Sonar & Unmasking & Soothe & Output
     juce::Slider impactSlider, smoothSlider, adaptiveSlider, unmaskSlider;
