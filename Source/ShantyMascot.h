@@ -36,15 +36,6 @@ public:
         smoothedFreqNorm = 0.85f * smoothedFreqNorm + 0.15f * juce::jlimit(0.0f, 1.0f, freqNorm);
         animTimeSec += 1.0f / 60.0f;
 
-        blinkTimer -= 1.0f / 60.0f;
-        if (blinkTimer <= 0.0f)
-        {
-            blinkProgress = 1.0f;
-            blinkTimer = 3.2f + 1.8f * std::abs(std::sin(animTimeSec * 0.53f));
-        }
-        if (blinkProgress > 0.0f)
-            blinkProgress = juce::jmax(0.0f, blinkProgress - (1.0f / 60.0f) * 5.5f);
-
         lickTimer -= 1.0f / 60.0f;
         if (lickTimer <= 0.0f)
         {
@@ -249,69 +240,26 @@ public:
             g.strokePath(tongue, juce::PathStrokeType(1.0f));
         }
 
-        // 4. Expressive Eyes: Happy (petted), Sleepy (bypass), Blinking, Soothe Squint, or Freq-Tracking
+        // 4. Happy eyes only when petted
+        if (isHappy)
         {
-            const float eyeR = destRect.getWidth() * 0.014f;
-            const float blinkEnv = (blinkProgress > 0.0f) ? std::sin(blinkProgress * juce::MathConstants<float>::pi) : 0.0f;
-
-            auto drawClosedEye = [&](float cxNorm, float cyNorm, float rx, float alpha, bool happyUp) {
+            const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
+            auto drawHappyEye = [&](float cxNorm, float cyNorm, float rx) {
                 const float cx = destRect.getX() + cxNorm * destRect.getWidth();
                 const float cy = destRect.getY() + cyNorm * destRect.getHeight();
-                g.setColour(juce::Colour(0xFFF6F8FA).withAlpha(alpha));
+                g.setColour(juce::Colour(0xFFF6F8FA).withAlpha(happyAlpha));
                 g.fillEllipse(cx - rx * 1.35f, cy - rx * 1.15f, rx * 2.7f, rx * 2.3f);
 
                 juce::Path arc;
-                const float dir = happyUp ? -0.95f : 0.85f;
-                const float base = happyUp ? 0.25f : -0.15f;
-                arc.startNewSubPath(cx - rx * 1.1f, cy + rx * base);
-                arc.quadraticTo(cx, cy + rx * dir, cx + rx * 1.1f, cy + rx * base);
-                g.setColour(juce::Colour(0xFF22252A).withAlpha(alpha));
+                arc.startNewSubPath(cx - rx * 1.1f, cy + rx * 0.25f);
+                arc.quadraticTo(cx, cy - rx * 0.95f, cx + rx * 1.1f, cy + rx * 0.25f);
+                g.setColour(juce::Colour(0xFF22252A).withAlpha(happyAlpha));
                 g.strokePath(arc, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             };
 
-            if (isHappy)
-            {
-                const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
-                drawClosedEye(0.663f, 0.193f, eyeR, happyAlpha, true);
-                drawClosedEye(0.742f, 0.184f, eyeR * 0.85f, happyAlpha, true);
-            }
-            else if (isBypassed || blinkEnv > 0.35f)
-            {
-                const float alpha = isBypassed ? 0.95f : juce::jlimit(0.0f, 1.0f, (blinkEnv - 0.35f) * 1.6f);
-                drawClosedEye(0.663f, 0.193f, eyeR, alpha, false);
-                drawClosedEye(0.742f, 0.184f, eyeR * 0.85f, alpha, false);
-            }
-            else
-            {
-                // Eye tracking (follows selected EQ frequency left <-> right) + Soothe squint / Delta glow
-                const float lookX = (smoothedFreqNorm - 0.5f) * eyeR * 0.8f;
-                auto drawTrackedEye = [&](float cxNorm, float cyNorm, float rx) {
-                    const float cx = destRect.getX() + cxNorm * destRect.getWidth();
-                    const float cy = destRect.getY() + cyNorm * destRect.getHeight();
-
-                    if (isDeltaMode || isLearningNow)
-                    {
-                        const auto glow = isDeltaMode ? Palette::satAmber : Palette::sonarCyan;
-                        g.setColour(glow.withAlpha(0.55f));
-                        g.drawEllipse(cx - rx * 1.3f, cy - rx * 1.1f, rx * 2.6f, rx * 2.2f, 1.4f);
-                    }
-
-                    // Pupil tracking dot
-                    g.setColour(juce::Colour(0xFF15181C).withAlpha(0.85f));
-                    g.fillEllipse(cx + lookX - rx * 0.42f, cy - rx * 0.42f, rx * 0.84f, rx * 0.84f);
-
-                    // Cozy Soothe squint upper eyelid
-                    if (isSootheMode && !isDeltaMode)
-                    {
-                        const float squint = 0.25f + 0.55f * currentSoothe;
-                        g.setColour(juce::Colour(0xFFE8ECF2).withAlpha(0.85f));
-                        g.fillRect(cx - rx * 1.2f, cy - rx * 1.1f, rx * 2.4f, rx * 1.2f * squint);
-                    }
-                };
-
-                drawTrackedEye(0.663f, 0.193f, eyeR);
-                drawTrackedEye(0.742f, 0.184f, eyeR * 0.85f);
-            }
+            const float eyeR = destRect.getWidth() * 0.014f;
+            drawHappyEye(0.663f, 0.193f, eyeR);
+            drawHappyEye(0.742f, 0.184f, eyeR * 0.85f);
         }
 
         // 5. Floating hearts
@@ -373,8 +321,6 @@ private:
     bool isBypassed     = false;
     bool isDeltaMode    = false;
     float smoothedFreqNorm = 0.5f;
-    float blinkTimer    = 2.8f;
-    float blinkProgress = 0.0f;
     float animTimeSec   = 0.0f;
 
     float lickTimer = 1.2f;

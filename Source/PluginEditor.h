@@ -18,8 +18,20 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void paintContent(juce::Graphics&);
 
 private:
+    static constexpr int baseWidth = 1140;
+    static constexpr int baseHeight = 720;
+
+    struct ScaleContainer : public juce::Component
+    {
+        explicit ScaleContainer(ShantySonarEQEditor& o) : owner(o) {}
+        void paint(juce::Graphics& g) override { owner.paintContent(g); }
+        ShantySonarEQEditor& owner;
+    };
+
+    ScaleContainer scaleContainer { *this };
     void timerCallback() override;
     void selectBand(int bandIndex);
     void setupKnob(juce::Slider& s, juce::Label& l, const juce::String& text, const juce::String& role, bool bipolar = false);

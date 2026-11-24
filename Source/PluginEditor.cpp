@@ -8,8 +8,10 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
 
     adamskyLogo = juce::ImageCache::getFromMemory(BinaryData::adamsky_logo_png, BinaryData::adamsky_logo_pngSize);
 
-    addAndMakeVisible(spectrum);
-    addAndMakeVisible(mascot);
+    addAndMakeVisible(scaleContainer);
+
+    scaleContainer.addAndMakeVisible(spectrum);
+    scaleContainer.addAndMakeVisible(mascot);
 
     spectrum.onBandSelected = [this](int idx) { selectBand(idx); };
 
@@ -24,23 +26,23 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
             p->setValueNotifyingHost(1.0f);
         updateModeVisibility();
     };
-    addAndMakeVisible(modeSonarBtn);
-    addAndMakeVisible(modeSootheBtn);
+    scaleContainer.addAndMakeVisible(modeSonarBtn);
+    scaleContainer.addAndMakeVisible(modeSootheBtn);
 
     profileCombo.addItemList({ "Universal", "Vocals", "Drums", "Bass", "Guitar", "Keys / Synth", "Speech", "Master" }, 1);
-    addAndMakeVisible(profileCombo);
+    scaleContainer.addAndMakeVisible(profileCombo);
     profileAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "profile", profileCombo);
 
     sootheQualCombo.addItemList({ "Soft", "Hard" }, 1);
-    addAndMakeVisible(sootheQualCombo);
+    scaleContainer.addAndMakeVisible(sootheQualCombo);
     sootheQualAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "soothe_quality", sootheQualCombo);
 
     sootheDeltaBtn.setClickingTogglesState(true);
-    addAndMakeVisible(sootheDeltaBtn);
+    scaleContainer.addAndMakeVisible(sootheDeltaBtn);
     sootheDeltaAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "soothe_delta", sootheDeltaBtn);
 
     phaseModeCombo.addItemList({ "Zero-Latency", "Linear Phase" }, 1);
-    addAndMakeVisible(phaseModeCombo);
+    scaleContainer.addAndMakeVisible(phaseModeCombo);
     phaseModeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "phase_mode", phaseModeCombo);
 
     learnBtn.onClick = [this] {
@@ -49,10 +51,10 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
         else
             processor.startLearn();
     };
-    addAndMakeVisible(learnBtn);
+    scaleContainer.addAndMakeVisible(learnBtn);
 
     clearLearnBtn.onClick = [this] { processor.clearLearned(); };
-    addAndMakeVisible(clearLearnBtn);
+    scaleContainer.addAndMakeVisible(clearLearnBtn);
 
     slotABtn.setClickingTogglesState(false);
     slotBBtn.setClickingTogglesState(false);
@@ -64,15 +66,15 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
         processor.switchAB(1);
         selectBand(currentBand);
     };
-    addAndMakeVisible(slotABtn);
-    addAndMakeVisible(slotBBtn);
+    scaleContainer.addAndMakeVisible(slotABtn);
+    scaleContainer.addAndMakeVisible(slotBBtn);
 
     autoGainBtn.setClickingTogglesState(true);
-    addAndMakeVisible(autoGainBtn);
+    scaleContainer.addAndMakeVisible(autoGainBtn);
     autoGainAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "auto_gain", autoGainBtn);
 
     bypassBtn.setClickingTogglesState(true);
-    addAndMakeVisible(bypassBtn);
+    scaleContainer.addAndMakeVisible(bypassBtn);
     bypassAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "bypass", bypassBtn);
 
     manualBtn.setTooltip("Open Manual / Руководство");
@@ -80,9 +82,9 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
         manualOverlay.setVisible(!manualOverlay.isVisible());
         manualOverlay.toFront(true);
     };
-    addAndMakeVisible(manualBtn);
+    scaleContainer.addAndMakeVisible(manualBtn);
 
-    addChildComponent(manualOverlay);
+    scaleContainer.addChildComponent(manualOverlay);
 
     // Right sidebar knobs
     setupKnob(impactSlider, impactLabel, "IMPACT", "sonar");
@@ -112,11 +114,11 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     outputAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "output_gain", outputSlider);
 
     groupCombo.addItemList({ "Group: Off", "Group A", "Group B", "Group C", "Group D" }, 1);
-    addAndMakeVisible(groupCombo);
+    scaleContainer.addAndMakeVisible(groupCombo);
     groupAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "unmask_group", groupCombo);
 
     priorityCombo.addItemList({ "Foreground", "Midground", "Background" }, 1);
-    addAndMakeVisible(priorityCombo);
+    scaleContainer.addAndMakeVisible(priorityCombo);
     priorityAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts, "unmask_priority", priorityCombo);
 
     // Bottom Band Inspector
@@ -125,30 +127,30 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
         auto& btn = bandButtons[i];
         btn.setButtonText(juce::String(i + 1));
         btn.onClick = [this, i] { selectBand(i); };
-        addAndMakeVisible(btn);
+        scaleContainer.addAndMakeVisible(btn);
     }
 
-    addAndMakeVisible(bandEnabledBtn);
+    scaleContainer.addAndMakeVisible(bandEnabledBtn);
     bandSoloBtn.setClickingTogglesState(true);
     bandSoloBtn.onClick = [this] {
         processor.setSoloBand(bandSoloBtn.getToggleState() ? currentBand : -1);
     };
-    addAndMakeVisible(bandSoloBtn);
+    scaleContainer.addAndMakeVisible(bandSoloBtn);
 
     bandTypeCombo.addItemList({ "Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut", "Notch", "Bandpass", "Tilt Shelf" }, 1);
-    addAndMakeVisible(bandTypeCombo);
+    scaleContainer.addAndMakeVisible(bandTypeCombo);
 
     bandSlopeCombo.addItemList({ "12 dB", "24 dB", "36 dB", "48 dB" }, 1);
-    addAndMakeVisible(bandSlopeCombo);
+    scaleContainer.addAndMakeVisible(bandSlopeCombo);
 
     bandChModeCombo.addItemList({ "Stereo", "Mid", "Side", "Left", "Right" }, 1);
-    addAndMakeVisible(bandChModeCombo);
+    scaleContainer.addAndMakeVisible(bandChModeCombo);
 
     setupKnob(bandFreqSlider, bandFreqLabel, "FREQ", "sonar");
     setupKnob(bandGainSlider, bandGainLabel, "GAIN", "sonar", true);
     setupKnob(bandQSlider, bandQLabel, "Q", "tail");
 
-    addAndMakeVisible(dynEnabledBtn);
+    scaleContainer.addAndMakeVisible(dynEnabledBtn);
     setupKnob(dynThreshSlider, dynThreshLabel, "THRESH", "dyn");
     setupKnob(dynRangeSlider, dynRangeLabel, "RANGE", "dyn", true);
     setupKnob(dynAtkSlider, dynAtkLabel, "ATTACK", "dyn");
@@ -158,8 +160,10 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     updateModeVisibility();
 
     setResizable(true, true);
-    setResizeLimits(980, 640, 1600, 1050);
-    setSize(1140, 720);
+    setResizeLimits(855, 540, 2280, 1440);
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio(static_cast<double>(baseWidth) / static_cast<double>(baseHeight));
+    setSize(baseWidth, baseHeight);
     startTimerHz(45);
 }
 
@@ -178,13 +182,13 @@ void ShantySonarEQEditor::setupKnob(juce::Slider& s, juce::Label& l, const juce:
     s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     s.getProperties().set("role", role);
     s.getProperties().set("bipolar", bipolar);
-    addAndMakeVisible(s);
+    scaleContainer.addAndMakeVisible(s);
 
     l.setText(text, juce::dontSendNotification);
     l.setJustificationType(juce::Justification::centred);
     l.setFont(juce::Font(10.5f, juce::Font::bold));
     l.setColour(juce::Label::textColourId, ShantySonar::Palette::textSecondary);
-    addAndMakeVisible(l);
+    scaleContainer.addAndMakeVisible(l);
 }
 
 void ShantySonarEQEditor::selectBand(int bandIndex)
@@ -321,15 +325,20 @@ void ShantySonarEQEditor::timerCallback()
 void ShantySonarEQEditor::paint(juce::Graphics& g)
 {
     g.fillAll(ShantySonar::Palette::bgDark);
+}
 
-    const auto bounds = getLocalBounds();
+void ShantySonarEQEditor::paintContent(juce::Graphics& g)
+{
+    g.fillAll(ShantySonar::Palette::bgDark);
+
+    const auto bounds = juce::Rectangle<int>(0, 0, baseWidth, baseHeight);
 
     // Header bar
     const auto header = bounds.withHeight(52);
     g.setColour(ShantySonar::Palette::bgPanel);
     g.fillRect(header);
     g.setColour(ShantySonar::Palette::borderSubtle);
-    g.drawHorizontalLine(header.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
+    g.drawHorizontalLine(header.getBottom() - 1, 0.0f, static_cast<float>(baseWidth));
 
     if (adamskyLogo.isValid())
         g.drawImageWithin(adamskyLogo, 12, 8, 36, 36, juce::RectanglePlacement::centred);
@@ -346,14 +355,14 @@ void ShantySonarEQEditor::paint(juce::Graphics& g)
     // Right sidebar panel background
     const int sideW = 248;
     const int bottomH = 166;
-    const auto sideRect = juce::Rectangle<int>(getWidth() - sideW - 8, 60, sideW, getHeight() - 60 - bottomH - 14);
+    const auto sideRect = juce::Rectangle<int>(baseWidth - sideW - 8, 60, sideW, baseHeight - 60 - bottomH - 14);
     g.setColour(ShantySonar::Palette::bgPanel);
     g.fillRoundedRectangle(sideRect.toFloat(), 6.0f);
     g.setColour(ShantySonar::Palette::borderSubtle);
     g.drawRoundedRectangle(sideRect.toFloat(), 6.0f, 1.0f);
 
     // Bottom inspector panel background
-    const auto botRect = juce::Rectangle<int>(8, getHeight() - bottomH - 8, getWidth() - 16, bottomH);
+    const auto botRect = juce::Rectangle<int>(8, baseHeight - bottomH - 8, baseWidth - 16, bottomH);
     g.setColour(ShantySonar::Palette::bgPanel);
     g.fillRoundedRectangle(botRect.toFloat(), 6.0f);
     g.setColour(ShantySonar::Palette::borderSubtle);
@@ -367,8 +376,13 @@ void ShantySonarEQEditor::paint(juce::Graphics& g)
 
 void ShantySonarEQEditor::resized()
 {
-    const int w = getWidth();
-    const int h = getHeight();
+    const float scaleX = static_cast<float>(getWidth()) / static_cast<float>(baseWidth);
+    const float scaleY = static_cast<float>(getHeight()) / static_cast<float>(baseHeight);
+    scaleContainer.setBounds(0, 0, baseWidth, baseHeight);
+    scaleContainer.setTransform(juce::AffineTransform::scale(scaleX, scaleY));
+
+    const int w = baseWidth;
+    const int h = baseHeight;
 
     // Top bar layout
     int tx = 272;
@@ -472,5 +486,5 @@ void ShantySonarEQEditor::resized()
     placeKnob(dynAtkSlider, dynAtkLabel, dStart + (dKw + 4) * 2, knobY, dKw, knobH);
     placeKnob(dynRelSlider, dynRelLabel, dStart + (dKw + 4) * 3, knobY, dKw, knobH);
 
-    manualOverlay.setBounds(getLocalBounds());
+    manualOverlay.setBounds(0, 0, baseWidth, baseHeight);
 }
