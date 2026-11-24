@@ -22,7 +22,7 @@ public:
 
     void updateAnimation(float audioLevel, float sonarActivity, float unmaskActivity, bool learning, bool learned,
                          bool sootheMode = false, float sootheReduction = 0.0f,
-                         bool bypassed = false, bool deltaMode = false, float freqNorm = 0.5f)
+                         bool bypassed = false, bool deltaMode = false, float /*freqNorm*/ = 0.5f)
     {
         currentAudio  = juce::jlimit(0.0f, 1.0f, audioLevel);
         currentSonar  = juce::jlimit(0.0f, 1.0f, sonarActivity);
@@ -33,14 +33,22 @@ public:
         currentSoothe = juce::jlimit(0.0f, 1.0f, sootheReduction);
         isBypassed    = bypassed;
         isDeltaMode   = deltaMode && sootheMode && !bypassed;
-        smoothedFreqNorm = 0.85f * smoothedFreqNorm + 0.15f * juce::jlimit(0.0f, 1.0f, freqNorm);
         animTimeSec += 1.0f / 60.0f;
+
+        sleepTwitchTimer -= 1.0f / 60.0f;
+        if (sleepTwitchTimer <= 0.0f)
+        {
+            sleepTwitchProgress = 1.0f;
+            sleepTwitchTimer = 3.2f + 1.8f * std::abs(std::sin(animTimeSec * 0.7f));
+        }
+        if (sleepTwitchProgress > 0.0f)
+            sleepTwitchProgress = juce::jmax(0.0f, sleepTwitchProgress - (1.0f / 60.0f) * 3.5f);
 
         lickTimer -= 1.0f / 60.0f;
         if (lickTimer <= 0.0f)
         {
             lickProgress = 1.0f;
-            lickTimer = 2.6f + 1.5f * std::abs(std::cos(animTimeSec * 0.7f));
+            lickTimer = 2.8f + 1.6f * std::abs(std::cos(animTimeSec * 0.7f));
         }
         if (lickProgress > 0.0f)
             lickProgress = juce::jmax(0.0f, lickProgress - (1.0f / 60.0f) * 1.75f);
@@ -109,9 +117,73 @@ public:
         if (!bodyFrame.isValid())
             return;
 
-        const bool isHappy = (petHappyTimer > 0.01f);
-        const float breathY = std::sin(animTimeSec * 2.2f) * 1.0f;
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
 
+        const bool isHappy = (petHappyTimer > 0.01f);
+
+        // Curled-up sleeping Shanti when bypassed (unless petted)
+        if (isBypassed && !isHappy && sleepingFrame.isValid())
+        {
+            const auto drawArea = bounds.reduced(8.0f, 10.0f);
+            const float imgW = static_cast<float>(sleepingFrame.getWidth());
+            const float imgH = static_cast<float>(sleepingFrame.getHeight());
+            const float scale = juce::jmin(1.0f, juce::jmin(drawArea.getWidth() / imgW, drawArea.getHeight() / imgH));
+            const float destW = imgW * scale;
+            const float destH = imgH * scale;
+            const juce::Rectangle<float> destRect(drawArea.getCentreX() - destW * 0.5f,
+                                                  drawArea.getBottom() - destH + 6.0f,
+                                                  destW, destH);
+
+            {
+                const float bgCx = destRect.getCentreX();
+                const float bgCy = destRect.getCentreY() + destRect.getHeight() * 0.08f;
+                const float bgR  = destRect.getWidth() * 0.50f;
+                juce::ColourGradient stageGlow(juce::Colour(0xFF252A34).withAlpha(0.45f), bgCx, bgCy,
+                                               juce::Colours::transparentBlack, bgCx + bgR, bgCy, true);
+                g.setGradientFill(stageGlow);
+                g.fillEllipse(bgCx - bgR, bgCy - bgR, bgR * 2.0f, bgR * 2.0f);
+            }
+
+            {
+                const float shY = destRect.getBottom() - destRect.getHeight() * 0.22f;
+                const auto shadowRect = juce::Rectangle<float>(destRect.getX() + destRect.getWidth() * 0.08f,
+                                                               shY,
+                                                               destRect.getWidth() * 0.84f,
+                                                               destRect.getHeight() * 0.12f);
+                g.setColour(juce::Colours::black.withAlpha(0.50f));
+                g.fillEllipse(shadowRect);
+            }
+
+            const float breath = std::sin(animTimeSec * 1.55f);
+            const float twitch = std::sin(sleepTwitchProgress * juce::MathConstants<float>::pi * 4.0f) * sleepTwitchProgress;
+            const float scaleY = 1.0f + 0.018f * breath;
+            const float scaleX = 1.0f - 0.008f * breath;
+            const float anchorX = destRect.getCentreX();
+            const float anchorY = destRect.getBottom() - destRect.getHeight() * 0.18f;
+
+            g.setOpacity(1.0f);
+            {
+                juce::Graphics::ScopedSaveState ss(g);
+                g.addTransform(juce::AffineTransform::scale(scaleX, scaleY, anchorX, anchorY)
+                                   .rotated(twitch * 0.025f, destRect.getX() + destRect.getWidth() * 0.72f,
+                                            destRect.getY() + destRect.getHeight() * 0.45f));
+                g.drawImage(sleepingFrame, destRect);
+            }
+
+            for (int k = 0; k < 3; ++k)
+            {
+                const float cycle = std::fmod(animTimeSec * 0.38f + static_cast<float>(k) * 0.33f, 1.0f);
+                const float alpha = std::sin(cycle * juce::MathConstants<float>::pi) * 0.65f;
+                const float zx = destRect.getX() + destRect.getWidth() * (0.76f + 0.05f * cycle + 0.02f * std::sin(cycle * 6.0f));
+                const float zy = destRect.getY() + destRect.getHeight() * (0.28f - 0.22f * cycle);
+                g.setColour(Palette::tailCyan.withAlpha(alpha));
+                g.setFont(juce::FontOptions(10.0f + 3.0f * cycle, juce::Font::bold));
+                g.drawText(k == 0 ? "z" : "Z", static_cast<int>(zx), static_cast<int>(zy), 14, 14, juce::Justification::centred);
+            }
+            return;
+        }
+
+        const float breathY = std::sin(animTimeSec * 2.2f) * 1.0f;
         const auto drawArea = bounds.reduced(4.0f, 4.0f).translated(0.0f, breathY - 2.0f);
         const float imgW = static_cast<float>(bodyFrame.getWidth());
         const float imgH = static_cast<float>(bodyFrame.getHeight());
@@ -171,35 +243,33 @@ public:
 
         g.setOpacity(1.0f);
 
-        // 1. Tail wags smoothly like a pendulum (slow when bypassed, lively when active/petted)
+        // 1. Tail wags smoothly like a pendulum
         if (tailFrame.isValid())
         {
             float wagAngle = 0.0f;
             if (isHappy)
                 wagAngle = std::sin(animTimeSec * 18.0f) * 0.24f;
-            else if (isBypassed)
-                wagAngle = std::sin(animTimeSec * 1.2f) * 0.02f;
             else
             {
                 const float energy = isSootheMode ? juce::jmax(currentAudio, currentSoothe) : juce::jmax(currentAudio, currentSonar);
                 wagAngle = std::sin(animTimeSec * (2.0f + energy * 6.5f)) * (0.03f + 0.14f * energy);
             }
 
-            const float pivotX = destRect.getX() + 0.305f * destRect.getWidth();
-            const float pivotY = destRect.getY() + 0.775f * destRect.getHeight();
+            const float pivotX = destRect.getX() + 0.325f * destRect.getWidth();
+            const float pivotY = destRect.getY() + 0.835f * destRect.getHeight();
 
             juce::Graphics::ScopedSaveState ss(g);
             g.addTransform(juce::AffineTransform::rotation(wagAngle, pivotX, pivotY));
             g.drawImage(tailFrame, destRect);
         }
 
-        // Listening head/body tilt during Learn or Delta; calm breath otherwise
+        // Listening head/body tilt during Learn, Delta, or Soothe
         float tiltAngle = 0.0f;
         if (isLearningNow)
             tiltAngle = std::sin(animTimeSec * 3.2f) * 0.045f;
         else if (isDeltaMode)
             tiltAngle = std::sin(animTimeSec * 5.0f) * 0.03f;
-        else if (isSootheMode && !isBypassed)
+        else if (isSootheMode)
             tiltAngle = std::sin(animTimeSec * 1.8f) * 0.015f * currentSoothe;
 
         const float neckX = destRect.getX() + 0.62f * destRect.getWidth();
@@ -209,38 +279,10 @@ public:
         juce::Graphics::ScopedSaveState bodyScope(g);
         g.addTransform(bodyTransform);
 
-        // 2. Seated Shanti body
+        // 2. Seated Shanti body (new crisp sprite from Shanty Pawmper)
         g.drawImage(bodyFrame, destRect);
 
-        // 3. Tongue lick
-        const float lickEnv = (lickProgress > 0.0f)
-            ? std::sin(lickProgress * juce::MathConstants<float>::pi)
-            : 0.0f;
-
-        if (lickEnv > 0.02f)
-        {
-            const float mouthX = destRect.getX() + 0.742f * destRect.getWidth();
-            const float mouthY = destRect.getY() + 0.278f * destRect.getHeight();
-            const float reach = std::pow(lickEnv, 0.75f);
-            const float tipX = mouthX + destRect.getWidth() * (0.008f + 0.036f * reach);
-            const float tipY = mouthY + destRect.getHeight() * (0.008f - 0.028f * reach);
-            const float baseHalfW = destRect.getHeight() * 0.010f * reach;
-
-            juce::Path tongue;
-            tongue.startNewSubPath(mouthX, mouthY - baseHalfW * 0.4f);
-            tongue.quadraticTo(mouthX + (tipX - mouthX) * 0.55f, mouthY + destRect.getHeight() * 0.014f * reach,
-                               tipX, tipY);
-            tongue.quadraticTo(mouthX + (tipX - mouthX) * 0.45f, mouthY + baseHalfW * 1.3f,
-                               mouthX - destRect.getWidth() * 0.004f, mouthY + baseHalfW);
-            tongue.closeSubPath();
-
-            g.setColour(juce::Colour(0xFFE9798B).withAlpha(juce::jmin(1.0f, lickEnv * 1.4f)));
-            g.fillPath(tongue);
-            g.setColour(juce::Colour(0xFF421C23).withAlpha(juce::jmin(1.0f, lickEnv * 1.4f)));
-            g.strokePath(tongue, juce::PathStrokeType(1.0f));
-        }
-
-        // 4. Happy eyes only when petted
+        // 3. Happy eyes only when petted
         if (isHappy)
         {
             const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
@@ -262,7 +304,7 @@ public:
             drawHappyEye(0.742f, 0.184f, eyeR * 0.85f);
         }
 
-        // 5. Floating hearts
+        // 4. Floating hearts
         for (const auto& h : hearts)
         {
             if (h.life > 0.01f)
@@ -280,15 +322,17 @@ public:
             }
         }
 
-        // 6. Collar glow in sync with Sonar / Unmasking
-        const float collarIntensity = juce::jlimit(0.0f, 1.0f, currentSonar * 0.7f + currentUnmask * 0.7f + (isLearningNow ? 0.5f : 0.0f));
+        // 5. Collar glow in sync with Sonar / Soothe / Unmasking
+        const float collarIntensity = juce::jlimit(0.0f, 1.0f,
+            currentSonar * 0.65f + currentUnmask * 0.7f + currentSoothe * 0.65f + (isLearningNow ? 0.5f : 0.0f));
         if (collarIntensity > 0.02f && collarGlowImage.isValid())
         {
             const float cx = destRect.getX() + collarNormCenter.x * destRect.getWidth();
             const float cy = destRect.getY() + collarNormCenter.y * destRect.getHeight();
             const float haloRadius = destRect.getWidth() * (0.14f + 0.09f * collarIntensity);
 
-            const auto haloCol = Palette::sonarCyan.interpolatedWith(Palette::teethRed, currentUnmask);
+            const auto baseHalo = isSootheMode ? Palette::satAmber : Palette::sonarCyan;
+            const auto haloCol = baseHalo.interpolatedWith(Palette::teethRed, currentUnmask);
             juce::ColourGradient halo(haloCol.withAlpha(0.72f * collarIntensity), cx, cy,
                                       juce::Colours::transparentBlack, cx + haloRadius, cy, true);
             g.setGradientFill(halo);
@@ -308,6 +352,7 @@ private:
 
     juce::Image bodyFrame;
     juce::Image tailFrame;
+    juce::Image sleepingFrame;
     juce::Image collarGlowImage;
     juce::Point<float> collarNormCenter { 0.63f, 0.35f };
 
@@ -320,9 +365,10 @@ private:
     bool isSootheMode   = false;
     bool isBypassed     = false;
     bool isDeltaMode    = false;
-    float smoothedFreqNorm = 0.5f;
     float animTimeSec   = 0.0f;
 
+    float sleepTwitchTimer = 2.0f;
+    float sleepTwitchProgress = 0.0f;
     float lickTimer = 1.2f;
     float lickProgress = 0.0f;
     bool isBeingPetted = false;
@@ -342,7 +388,8 @@ private:
         h.phase = animTimeSec;
     }
 
-    static juce::Image stripOuterWhiteBackground(const juce::Image& src)
+    static juce::Image stripOuterWhiteBackground(const juce::Image& src,
+                                                 std::initializer_list<juce::Point<float>> extraSeeds = {})
     {
         const int w = src.getWidth();
         const int h = src.getHeight();
@@ -357,7 +404,10 @@ private:
 
         auto isNearWhite = [&](int x, int y) -> bool {
             const auto c = srcData.getPixelColour(x, y);
-            return c.getRed() >= 235 && c.getGreen() >= 235 && c.getBlue() >= 235;
+            const int minC = juce::jmin(static_cast<int>(c.getRed()),
+                                        juce::jmin(static_cast<int>(c.getGreen()),
+                                                   static_cast<int>(c.getBlue())));
+            return minC >= 220;
         };
 
         std::vector<uint8_t> visited(static_cast<size_t>(w * h), 0);
@@ -372,6 +422,18 @@ private:
         {
             if (isNearWhite(0, y)) { visited[static_cast<size_t>(y * w)] = 1; q.push({ 0, y }); }
             if (isNearWhite(w - 1, y)) { visited[static_cast<size_t>(y * w + w - 1)] = 1; q.push({ w - 1, y }); }
+        }
+
+        for (const auto& seed : extraSeeds)
+        {
+            const int sx = juce::jlimit(0, w - 1, static_cast<int>(seed.x * static_cast<float>(w)));
+            const int sy = juce::jlimit(0, h - 1, static_cast<int>(seed.y * static_cast<float>(h)));
+            const size_t idx = static_cast<size_t>(sy * w + sx);
+            if (!visited[idx] && isNearWhite(sx, sy))
+            {
+                visited[idx] = 1;
+                q.push({ sx, sy });
+            }
         }
 
         const int dx[4] = { 1, -1, 0, 0 };
@@ -399,11 +461,56 @@ private:
             }
         }
 
+        // Smooth anti-aliased edge feathering + white-halo removal (2 passes)
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            std::vector<juce::Colour> updates;
+            std::vector<std::pair<int, int>> coords;
+
+            for (int y = 1; y < h - 1; ++y)
+            {
+                for (int x = 1; x < w - 1; ++x)
+                {
+                    const auto c = dstData.getPixelColour(x, y);
+                    if (c.getAlpha() == 0)
+                        continue;
+
+                    int transparentNeighbors = 0;
+                    for (int d = 0; d < 4; ++d)
+                    {
+                        if (dstData.getPixelColour(x + dx[d], y + dy[d]).getAlpha() < 64)
+                            ++transparentNeighbors;
+                    }
+
+                    if (transparentNeighbors > 0)
+                    {
+                        const float luma = (static_cast<float>(c.getRed()) + c.getGreen() + c.getBlue()) / 3.0f;
+                        const float edgeAlpha = juce::jlimit(0.15f, 1.0f, (235.0f - luma) / 145.0f);
+                        const float newAlpha = (static_cast<float>(c.getAlpha()) / 255.0f) * edgeAlpha;
+                        const float rgbScale = (luma > 130.0f) ? 0.35f : 0.85f;
+                        const auto nc = juce::Colour::fromRGBA(
+                            static_cast<uint8_t>(c.getRed() * rgbScale),
+                            static_cast<uint8_t>(c.getGreen() * rgbScale),
+                            static_cast<uint8_t>(c.getBlue() * rgbScale),
+                            static_cast<uint8_t>(juce::jlimit(0.0f, 255.0f, newAlpha * 255.0f)));
+                        updates.push_back(nc);
+                        coords.push_back({ x, y });
+                    }
+                }
+            }
+
+            for (size_t i = 0; i < coords.size(); ++i)
+                dstData.setPixelColour(coords[i].first, coords[i].second, updates[i]);
+        }
+
         return out;
     }
 
     static juce::Colour brightenFurPixel(juce::Colour c)
     {
+        if (c.getAlpha() < 245)
+            return c;
+
         const int r = c.getRed();
         const int g = c.getGreen();
         const int b = c.getBlue();
@@ -425,18 +532,12 @@ private:
 
     void loadSittingParts()
     {
-        auto sheet = juce::ImageCache::getFromMemory(BinaryData::shanti_v3_sheet_png,
-                                                     BinaryData::shanti_v3_sheet_pngSize);
-        if (!sheet.isValid())
+        auto rawSit = juce::ImageCache::getFromMemory(BinaryData::shanti_sitting_png,
+                                                      BinaryData::shanti_sitting_pngSize);
+        if (!rawSit.isValid())
             return;
 
-        constexpr int cols = 4;
-        constexpr int rows = 3;
-        const int cellW = sheet.getWidth() / cols;
-        const int cellH = sheet.getHeight() / rows;
-
-        auto cell = sheet.getClippedImage(juce::Rectangle<int>(3 * cellW, 2 * cellH, cellW, cellH));
-        auto fullSit = stripOuterWhiteBackground(cell);
+        auto fullSit = stripOuterWhiteBackground(rawSit, { { 0.595f, 0.780f } });
 
         const int w = fullSit.getWidth();
         const int h = fullSit.getHeight();
@@ -450,8 +551,11 @@ private:
         juce::Image::BitmapData tailData(tailFrame, juce::Image::BitmapData::writeOnly);
         juce::Image::BitmapData glowData(collarGlowImage, juce::Image::BitmapData::writeOnly);
 
-        const int tailCutX = static_cast<int>(w * 0.305f);
-        const int tailCutY = static_cast<int>(h * 0.500f);
+        const int tailCutX = static_cast<int>(w * 0.320f);
+        const int tailCutY = static_cast<int>(h * 0.560f);
+        const int tailRootMinY = static_cast<int>(h * 0.780f);
+        const int tailRootMaxY = static_cast<int>(h * 0.875f);
+        const int tailOverlapPx = 14;
 
         double sumX = 0.0, sumY = 0.0;
         int count = 0;
@@ -467,9 +571,15 @@ private:
                 const auto c = brightenFurPixel(raw);
 
                 if (x < tailCutX && y > tailCutY)
+                {
                     tailData.setPixelColour(x, y, c);
+                }
                 else
+                {
                     bodyData.setPixelColour(x, y, c);
+                    if (y >= tailRootMinY && y <= tailRootMaxY && x >= tailCutX && x < tailCutX + tailOverlapPx)
+                        tailData.setPixelColour(x, y, c);
+                }
 
                 if (raw.getAlpha() > 128)
                 {
@@ -490,6 +600,27 @@ private:
         if (count > 0)
             collarNormCenter = { static_cast<float>(sumX / (count * w)),
                                  static_cast<float>(sumY / (count * h)) };
+
+        auto rawSleep = juce::ImageCache::getFromMemory(BinaryData::shanti_sleeping_png,
+                                                        BinaryData::shanti_sleeping_pngSize);
+        if (rawSleep.isValid())
+        {
+            auto cleanSleep = stripOuterWhiteBackground(rawSleep);
+            const int sw = cleanSleep.getWidth();
+            const int sh = cleanSleep.getHeight();
+            sleepingFrame = juce::Image(juce::Image::ARGB, sw, sh, true);
+            juce::Image::BitmapData sSrc(cleanSleep, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData sDst(sleepingFrame, juce::Image::BitmapData::writeOnly);
+            for (int y = 0; y < sh; ++y)
+            {
+                for (int x = 0; x < sw; ++x)
+                {
+                    const auto c = sSrc.getPixelColour(x, y);
+                    if (c.getAlpha() > 0)
+                        sDst.setPixelColour(x, y, brightenFurPixel(c));
+                }
+            }
+        }
     }
 };
 
