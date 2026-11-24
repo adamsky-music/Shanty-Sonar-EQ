@@ -301,13 +301,21 @@ void ShantySonarEQEditor::timerCallback()
             btn.setColour(juce::TextButton::buttonColourId, ShantySonar::Palette::bgPanel);
     }
 
+    const bool isBypassed = (processor.apvts.getRawParameterValue("bypass")->load() > 0.5f);
+    const bool isDelta    = (processor.apvts.getRawParameterValue("soothe_delta")->load() > 0.5f);
+    const float curFreq   = processor.getBandParams(currentBand).freq;
+    const float freqNorm  = juce::jlimit(0.0f, 1.0f, std::log10(juce::jlimit(20.0f, 20000.0f, curFreq) / 20.0f) / 3.0f);
+
     mascot.updateAnimation(processor.outputLevelMeter.load(std::memory_order_relaxed),
                            processor.sonarActivityMeter.load(std::memory_order_relaxed),
                            processor.unmaskActivityMeter.load(std::memory_order_relaxed),
                            learning,
                            learned,
                            isSoothe,
-                           processor.sootheReductionMeter.load(std::memory_order_relaxed));
+                           processor.sootheReductionMeter.load(std::memory_order_relaxed),
+                           isBypassed,
+                           isDelta,
+                           freqNorm);
 }
 
 void ShantySonarEQEditor::paint(juce::Graphics& g)

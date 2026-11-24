@@ -21,16 +21,29 @@ public:
     }
 
     void updateAnimation(float audioLevel, float sonarActivity, float unmaskActivity, bool learning, bool learned,
-                         bool sootheMode = false, float sootheReduction = 0.0f)
+                         bool sootheMode = false, float sootheReduction = 0.0f,
+                         bool bypassed = false, bool deltaMode = false, float freqNorm = 0.5f)
     {
         currentAudio  = juce::jlimit(0.0f, 1.0f, audioLevel);
         currentSonar  = juce::jlimit(0.0f, 1.0f, sonarActivity);
         currentUnmask = juce::jlimit(0.0f, 1.0f, unmaskActivity);
-        isLearningNow = learning && !sootheMode;
+        isLearningNow = learning && !sootheMode && !bypassed;
         hasLearnedNow = learned && !sootheMode;
         isSootheMode  = sootheMode;
         currentSoothe = juce::jlimit(0.0f, 1.0f, sootheReduction);
+        isBypassed    = bypassed;
+        isDeltaMode   = deltaMode && sootheMode && !bypassed;
+        smoothedFreqNorm = 0.85f * smoothedFreqNorm + 0.15f * juce::jlimit(0.0f, 1.0f, freqNorm);
         animTimeSec += 1.0f / 60.0f;
+
+        blinkTimer -= 1.0f / 60.0f;
+        if (blinkTimer <= 0.0f)
+        {
+            blinkProgress = 1.0f;
+            blinkTimer = 3.2f + 1.8f * std::abs(std::sin(animTimeSec * 0.53f));
+        }
+        if (blinkProgress > 0.0f)
+            blinkProgress = juce::jmax(0.0f, blinkProgress - (1.0f / 60.0f) * 5.5f);
 
         lickTimer -= 1.0f / 60.0f;
         if (lickTimer <= 0.0f)
@@ -137,17 +150,19 @@ public:
             g.fillEllipse(bgCx - bgR, bgCy - bgR, bgR * 2.0f, bgR * 2.0f);
         }
 
-        // Sonar radar rings when Learning
-        if (isLearningNow)
+        // Sonar radar rings when Learning or Soothe Delta
+        if (isLearningNow || isDeltaMode)
         {
             const float earCx = destRect.getX() + destRect.getWidth() * 0.68f;
             const float earCy = destRect.getY() + destRect.getHeight() * 0.16f;
+            const auto ringCol = isDeltaMode ? Palette::satAmber : Palette::sonarCyan;
+            const float speed = isDeltaMode ? 2.1f : 1.4f;
             for (int rIdx = 0; rIdx < 3; ++rIdx)
             {
-                const float phase = std::fmod(animTimeSec * 1.4f + static_cast<float>(rIdx) * 0.33f, 1.0f);
+                const float phase = std::fmod(animTimeSec * speed + static_cast<float>(rIdx) * 0.33f, 1.0f);
                 const float rad = 10.0f + phase * destRect.getWidth() * 0.55f;
                 const float alpha = (1.0f - phase) * 0.65f;
-                g.setColour(Palette::sonarCyan.withAlpha(alpha));
+                g.setColour(ringCol.withAlpha(alpha));
                 g.drawEllipse(earCx - rad, earCy - rad, rad * 2.0f, rad * 2.0f, 1.6f);
             }
         }
@@ -165,14 +180,19 @@ public:
 
         g.setOpacity(1.0f);
 
-        // 1. Tail wags with audio / happy petting
+        // 1. Tail wags smoothly like a pendulum (slow when bypassed, lively when active/petted)
         if (tailFrame.isValid())
         {
             float wagAngle = 0.0f;
             if (isHappy)
                 wagAngle = std::sin(animTimeSec * 18.0f) * 0.24f;
+            else if (isBypassed)
+                wagAngle = std::sin(animTimeSec * 1.2f) * 0.02f;
             else
-                wagAngle = std::sin(animTimeSec * (2.5f + currentAudio * 9.0f)) * (0.025f + 0.17f * currentAudio);
+            {
+                const float energy = isSootheMode ? juce::jmax(currentAudio, currentSoothe) : juce::jmax(currentAudio, currentSonar);
+                wagAngle = std::sin(animTimeSec * (2.0f + energy * 6.5f)) * (0.03f + 0.14f * energy);
+            }
 
             const float pivotX = destRect.getX() + 0.305f * destRect.getWidth();
             const float pivotY = destRect.getY() + 0.775f * destRect.getHeight();
@@ -182,16 +202,21 @@ public:
             g.drawImage(tailFrame, destRect);
         }
 
-        const float bounce = currentAudio * 0.6f;
-        const float groundX = destRect.getCentreX();
-        const float groundY = destRect.getBottom() - destRect.getHeight() * 0.13f;
-        const auto beatTransform = juce::AffineTransform::scale(1.0f + 0.012f * bounce,
-                                                                1.0f - 0.018f * bounce,
-                                                                groundX, groundY)
-                                       .translated(0.0f, bounce * 1.2f);
+        // Listening head/body tilt during Learn or Delta; calm breath otherwise
+        float tiltAngle = 0.0f;
+        if (isLearningNow)
+            tiltAngle = std::sin(animTimeSec * 3.2f) * 0.045f;
+        else if (isDeltaMode)
+            tiltAngle = std::sin(animTimeSec * 5.0f) * 0.03f;
+        else if (isSootheMode && !isBypassed)
+            tiltAngle = std::sin(animTimeSec * 1.8f) * 0.015f * currentSoothe;
+
+        const float neckX = destRect.getX() + 0.62f * destRect.getWidth();
+        const float neckY = destRect.getY() + 0.45f * destRect.getHeight();
+        const auto bodyTransform = juce::AffineTransform::rotation(tiltAngle, neckX, neckY);
 
         juce::Graphics::ScopedSaveState bodyScope(g);
-        g.addTransform(beatTransform);
+        g.addTransform(bodyTransform);
 
         // 2. Seated Shanti body
         g.drawImage(bodyFrame, destRect);
@@ -224,26 +249,69 @@ public:
             g.strokePath(tongue, juce::PathStrokeType(1.0f));
         }
 
-        // 4. Happy eyes when petted
-        if (isHappy)
+        // 4. Expressive Eyes: Happy (petted), Sleepy (bypass), Blinking, Soothe Squint, or Freq-Tracking
         {
-            const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
-            auto drawHappyEye = [&](float cxNorm, float cyNorm, float rx) {
+            const float eyeR = destRect.getWidth() * 0.014f;
+            const float blinkEnv = (blinkProgress > 0.0f) ? std::sin(blinkProgress * juce::MathConstants<float>::pi) : 0.0f;
+
+            auto drawClosedEye = [&](float cxNorm, float cyNorm, float rx, float alpha, bool happyUp) {
                 const float cx = destRect.getX() + cxNorm * destRect.getWidth();
                 const float cy = destRect.getY() + cyNorm * destRect.getHeight();
-                g.setColour(juce::Colour(0xFFF6F8FA).withAlpha(happyAlpha));
+                g.setColour(juce::Colour(0xFFF6F8FA).withAlpha(alpha));
                 g.fillEllipse(cx - rx * 1.35f, cy - rx * 1.15f, rx * 2.7f, rx * 2.3f);
 
                 juce::Path arc;
-                arc.startNewSubPath(cx - rx * 1.1f, cy + rx * 0.25f);
-                arc.quadraticTo(cx, cy - rx * 0.95f, cx + rx * 1.1f, cy + rx * 0.25f);
-                g.setColour(juce::Colour(0xFF22252A).withAlpha(happyAlpha));
+                const float dir = happyUp ? -0.95f : 0.85f;
+                const float base = happyUp ? 0.25f : -0.15f;
+                arc.startNewSubPath(cx - rx * 1.1f, cy + rx * base);
+                arc.quadraticTo(cx, cy + rx * dir, cx + rx * 1.1f, cy + rx * base);
+                g.setColour(juce::Colour(0xFF22252A).withAlpha(alpha));
                 g.strokePath(arc, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             };
 
-            const float eyeR = destRect.getWidth() * 0.014f;
-            drawHappyEye(0.663f, 0.193f, eyeR);
-            drawHappyEye(0.742f, 0.184f, eyeR * 0.85f);
+            if (isHappy)
+            {
+                const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
+                drawClosedEye(0.663f, 0.193f, eyeR, happyAlpha, true);
+                drawClosedEye(0.742f, 0.184f, eyeR * 0.85f, happyAlpha, true);
+            }
+            else if (isBypassed || blinkEnv > 0.35f)
+            {
+                const float alpha = isBypassed ? 0.95f : juce::jlimit(0.0f, 1.0f, (blinkEnv - 0.35f) * 1.6f);
+                drawClosedEye(0.663f, 0.193f, eyeR, alpha, false);
+                drawClosedEye(0.742f, 0.184f, eyeR * 0.85f, alpha, false);
+            }
+            else
+            {
+                // Eye tracking (follows selected EQ frequency left <-> right) + Soothe squint / Delta glow
+                const float lookX = (smoothedFreqNorm - 0.5f) * eyeR * 0.8f;
+                auto drawTrackedEye = [&](float cxNorm, float cyNorm, float rx) {
+                    const float cx = destRect.getX() + cxNorm * destRect.getWidth();
+                    const float cy = destRect.getY() + cyNorm * destRect.getHeight();
+
+                    if (isDeltaMode || isLearningNow)
+                    {
+                        const auto glow = isDeltaMode ? Palette::satAmber : Palette::sonarCyan;
+                        g.setColour(glow.withAlpha(0.55f));
+                        g.drawEllipse(cx - rx * 1.3f, cy - rx * 1.1f, rx * 2.6f, rx * 2.2f, 1.4f);
+                    }
+
+                    // Pupil tracking dot
+                    g.setColour(juce::Colour(0xFF15181C).withAlpha(0.85f));
+                    g.fillEllipse(cx + lookX - rx * 0.42f, cy - rx * 0.42f, rx * 0.84f, rx * 0.84f);
+
+                    // Cozy Soothe squint upper eyelid
+                    if (isSootheMode && !isDeltaMode)
+                    {
+                        const float squint = 0.25f + 0.55f * currentSoothe;
+                        g.setColour(juce::Colour(0xFFE8ECF2).withAlpha(0.85f));
+                        g.fillRect(cx - rx * 1.2f, cy - rx * 1.1f, rx * 2.4f, rx * 1.2f * squint);
+                    }
+                };
+
+                drawTrackedEye(0.663f, 0.193f, eyeR);
+                drawTrackedEye(0.742f, 0.184f, eyeR * 0.85f);
+            }
         }
 
         // 5. Floating hearts
@@ -302,6 +370,11 @@ private:
     bool isLearningNow  = false;
     bool hasLearnedNow  = false;
     bool isSootheMode   = false;
+    bool isBypassed     = false;
+    bool isDeltaMode    = false;
+    float smoothedFreqNorm = 0.5f;
+    float blinkTimer    = 2.8f;
+    float blinkProgress = 0.0f;
     float animTimeSec   = 0.0f;
 
     float lickTimer = 1.2f;
