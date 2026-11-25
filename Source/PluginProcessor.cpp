@@ -370,13 +370,17 @@ void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         const int r = (dryDelayWritePos + i - dryDelaySamples + delayCap) % delayCap;
         const float dryL = dryDelayBuffer.getSample(0, r);
         const float wetL = isDelta ? (dryL - left[i]) : (left[i] * outGainLin);
-        left[i] = isDelta ? wetL : (dryL * (1.0f - mix) + wetL * mix);
+        float outL = isDelta ? wetL : (dryL * (1.0f - mix) + wetL * mix);
+        if (!std::isfinite(outL)) outL = 0.0f;
+        left[i] = juce::jlimit(-4.0f, 4.0f, outL);
 
         if (right != nullptr)
         {
             const float dryR = dryDelayBuffer.getSample(1, r);
             const float wetR = isDelta ? (dryR - right[i]) : (right[i] * outGainLin);
-            right[i] = isDelta ? wetR : (dryR * (1.0f - mix) + wetR * mix);
+            float outR = isDelta ? wetR : (dryR * (1.0f - mix) + wetR * mix);
+            if (!std::isfinite(outR)) outR = 0.0f;
+            right[i] = juce::jlimit(-4.0f, 4.0f, outR);
         }
     }
     dryDelayWritePos = (dryDelayWritePos + numSamples) % delayCap;

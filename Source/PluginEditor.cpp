@@ -77,7 +77,7 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     scaleContainer.addAndMakeVisible(bypassBtn);
     bypassAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "bypass", bypassBtn);
 
-    manualBtn.setTooltip("Open Manual / Руководство");
+    manualBtn.setTooltip(juce::String::fromUTF8("Open Manual / Руководство"));
     manualBtn.onClick = [this] {
         manualOverlay.setVisible(!manualOverlay.isVisible());
         manualOverlay.toFront(true);

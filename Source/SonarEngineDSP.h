@@ -724,7 +724,9 @@ private:
                 for (int i = 0; i < fftSize; ++i)
                 {
                     const int idx = (ringWritePos + i) & (fftSize - 1);
-                    outRing[ch][idx] += stftWorkspace[i] * window[i] * synthScale;
+                    const float val = stftWorkspace[i] * window[i] * synthScale;
+                    if (std::isfinite(val))
+                        outRing[ch][idx] += val;
                 }
             }
         }

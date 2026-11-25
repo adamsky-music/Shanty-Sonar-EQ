@@ -59,13 +59,22 @@ struct BiquadCoeffs
 
     static BiquadCoeffs makeFromRaw(double b0, double b1, double b2, double a0, double a1, double a2) noexcept
     {
+        if (!std::isfinite(b0) || !std::isfinite(b1) || !std::isfinite(b2) ||
+            !std::isfinite(a0) || !std::isfinite(a1) || !std::isfinite(a2) ||
+            std::abs(a0) <= 1e-12)
+            return makeIdentity();
+
         BiquadCoeffs c;
-        const double invA0 = (std::abs(a0) > 1e-12) ? (1.0 / a0) : 1.0;
+        const double invA0 = 1.0 / a0;
         c.b0 = b0 * invA0;
         c.b1 = b1 * invA0;
         c.b2 = b2 * invA0;
         c.a1 = a1 * invA0;
         c.a2 = a2 * invA0;
+
+        // Stability check (poles strictly inside unit circle: |a2| < 1 and |a1| < 1 + a2)
+        if (std::abs(c.a2) >= 0.999999 || std::abs(c.a1) >= (1.0 + c.a2 - 1e-7))
+            return makeIdentity();
         return c;
     }
 
@@ -73,11 +82,12 @@ struct BiquadCoeffs
     {
         if (std::abs(gainDb) < 0.01)
             return makeIdentity();
-        const double A = std::pow(10.0, gainDb / 40.0);
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double clampedGain = juce::jlimit(-24.0, 24.0, gainDb);
+        const double A = std::pow(10.0, clampedGain / 40.0);
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double alpha = sinW0 / (2.0 * juce::jmax(0.05, q));
+        const double alpha = sinW0 / (2.0 * juce::jlimit(0.1, 18.0, q));
         return makeFromRaw(1.0 + alpha * A, -2.0 * cosW0, 1.0 - alpha * A,
                            1.0 + alpha / A, -2.0 * cosW0, 1.0 - alpha / A);
     }
@@ -86,12 +96,14 @@ struct BiquadCoeffs
     {
         if (std::abs(gainDb) < 0.01)
             return makeIdentity();
-        const double A = std::pow(10.0, gainDb / 40.0);
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double clampedGain = juce::jlimit(-24.0, 24.0, gainDb);
+        const double A = std::pow(10.0, clampedGain / 40.0);
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double slope = juce::jlimit(0.15, 2.0, q);
-        const double alpha = (sinW0 * 0.5) * std::sqrt((A + 1.0 / A) * (1.0 / slope - 1.0) + 2.0);
+        const double slope = juce::jlimit(0.15, 1.0, q);
+        const double rad = juce::jmax(1e-6, (A + 1.0 / A) * (1.0 / slope - 1.0) + 2.0);
+        const double alpha = (sinW0 * 0.5) * std::sqrt(rad);
         const double twoSqrtAAlpha = 2.0 * std::sqrt(A) * alpha;
 
         return makeFromRaw(A * ((A + 1.0) - (A - 1.0) * cosW0 + twoSqrtAAlpha),
@@ -106,12 +118,14 @@ struct BiquadCoeffs
     {
         if (std::abs(gainDb) < 0.01)
             return makeIdentity();
-        const double A = std::pow(10.0, gainDb / 40.0);
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double clampedGain = juce::jlimit(-24.0, 24.0, gainDb);
+        const double A = std::pow(10.0, clampedGain / 40.0);
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double slope = juce::jlimit(0.15, 2.0, q);
-        const double alpha = (sinW0 * 0.5) * std::sqrt((A + 1.0 / A) * (1.0 / slope - 1.0) + 2.0);
+        const double slope = juce::jlimit(0.15, 1.0, q);
+        const double rad = juce::jmax(1e-6, (A + 1.0 / A) * (1.0 / slope - 1.0) + 2.0);
+        const double alpha = (sinW0 * 0.5) * std::sqrt(rad);
         const double twoSqrtAAlpha = 2.0 * std::sqrt(A) * alpha;
 
         return makeFromRaw(A * ((A + 1.0) + (A - 1.0) * cosW0 + twoSqrtAAlpha),
@@ -124,40 +138,40 @@ struct BiquadCoeffs
 
     static BiquadCoeffs makeLowCut(double sr, double freq, double q) noexcept
     {
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double alpha = sinW0 / (2.0 * juce::jmax(0.2, q));
+        const double alpha = sinW0 / (2.0 * juce::jlimit(0.2, 12.0, q));
         return makeFromRaw((1.0 + cosW0) * 0.5, -(1.0 + cosW0), (1.0 + cosW0) * 0.5,
                            1.0 + alpha, -2.0 * cosW0, 1.0 - alpha);
     }
 
     static BiquadCoeffs makeHighCut(double sr, double freq, double q) noexcept
     {
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double alpha = sinW0 / (2.0 * juce::jmax(0.2, q));
+        const double alpha = sinW0 / (2.0 * juce::jlimit(0.2, 12.0, q));
         return makeFromRaw((1.0 - cosW0) * 0.5, 1.0 - cosW0, (1.0 - cosW0) * 0.5,
                            1.0 + alpha, -2.0 * cosW0, 1.0 - alpha);
     }
 
     static BiquadCoeffs makeNotch(double sr, double freq, double q) noexcept
     {
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double alpha = sinW0 / (2.0 * juce::jmax(0.2, q));
+        const double alpha = sinW0 / (2.0 * juce::jlimit(0.2, 18.0, q));
         return makeFromRaw(1.0, -2.0 * cosW0, 1.0,
                            1.0 + alpha, -2.0 * cosW0, 1.0 - alpha);
     }
 
     static BiquadCoeffs makeBandpass(double sr, double freq, double q) noexcept
     {
-        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(10.0, sr * 0.48, freq) / sr;
+        const double w0 = juce::MathConstants<double>::twoPi * juce::jlimit(20.0, sr * 0.45, freq) / sr;
         const double cosW0 = std::cos(w0);
         const double sinW0 = std::sin(w0);
-        const double alpha = sinW0 / (2.0 * juce::jmax(0.2, q));
+        const double alpha = sinW0 / (2.0 * juce::jlimit(0.2, 18.0, q));
         return makeFromRaw(alpha, 0.0, -alpha,
                            1.0 + alpha, -2.0 * cosW0, 1.0 - alpha);
     }
@@ -181,10 +195,21 @@ struct BiquadState
 
     inline float process(float x, const BiquadCoeffs& c) noexcept
     {
+        if (!std::isfinite(x))
+        {
+            reset();
+            return 0.0f;
+        }
         const double xd = static_cast<double>(x);
         const double y = c.b0 * xd + z1;
         z1 = c.b1 * xd - c.a1 * y + z2;
         z2 = c.b2 * xd - c.a2 * y;
+
+        if (!std::isfinite(y) || !std::isfinite(z1) || !std::isfinite(z2) || std::abs(y) > 1e5)
+        {
+            reset();
+            return 0.0f;
+        }
         return static_cast<float>(y);
     }
 };
@@ -321,10 +346,19 @@ public:
                 envState = coeff * envState + (1.0f - coeff) * rect;
             }
 
+            if (!std::isfinite(envState))
+                envState = 0.0f;
             const float envDb = 20.0f * std::log10(juce::jmax(1e-6f, envState));
             const float overDb = envDb - p.dynThresholdDb;
             const float ratio = juce::jlimit(0.0f, 1.0f, (overDb + 3.0f) / 15.0f);
-            dynOffsetDb = p.dynRangeDb * ratio;
+            const float targetDynDb = p.dynRangeDb * ratio;
+            smoothedDynDb = 0.80f * smoothedDynDb + 0.20f * targetDynDb;
+            dynOffsetDb = smoothedDynDb;
+        }
+        else
+        {
+            smoothedDynDb *= 0.80f;
+            dynOffsetDb = smoothedDynDb;
         }
 
         currentDynGainDb.store(dynOffsetDb, std::memory_order_relaxed);
@@ -419,6 +453,7 @@ private:
     std::array<std::array<BiquadState, maxStages>, 2> stages;
     std::array<BiquadState, 2> detFilter;
     float envState = 0.0f;
+    float smoothedDynDb = 0.0f;
     std::atomic<float> currentDynGainDb { 0.0f };
 };
 

@@ -45,8 +45,9 @@ public:
         g.drawRoundedRectangle(card, 10.0f, 1.5f);
 
         g.setColour(Palette::textPrimary);
-        g.setFont(juce::Font(16.0f, juce::Font::bold));
-        g.drawText(isRussian ? "SHANTY SONAR EQ — РУКОВОДСТВО" : "SHANTY SONAR EQ — MANUAL",
+        g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+        g.drawText(isRussian ? juce::String::fromUTF8("SHANTY SONAR EQ — РУКОВОДСТВО")
+                             : juce::String::fromUTF8("SHANTY SONAR EQ — MANUAL"),
                    static_cast<int>(card.getX()) + 18, static_cast<int>(card.getY()) + 12,
                    static_cast<int>(card.getWidth()) - 140, 26, juce::Justification::left);
     }
@@ -76,7 +77,7 @@ private:
     {
         if (isRussian)
         {
-            editor.setText(
+            editor.setText(juce::String::fromUTF8(
                 "SHANTY SONAR EQ (Adamsky Music)\n"
                 "Двухрежимный адаптивный эквалайзер: SONAR (аналог smart:EQ 4) + SMOOTH (подавитель резонансов).\n\n"
                 "============================================================\n"
@@ -118,12 +119,12 @@ private:
                 "• Zero-Latency / Linear Phase: нулевая задержка для записи или линейно-фазовая STFT-обработка для сведения и мастеринга.\n"
                 "• A / B: мгновенное сравнение двух состояний настроек.\n"
                 "• AUTO GAIN: автоматическая компенсация громкости.\n"
-                "• Шанти-маскот: реагирует на сканирование, громкость и подавление резонансов. Погладьте её мышкой!",
+                "• Шанти-маскот: реагирует на сканирование, громкость и подавление резонансов. Погладьте её мышкой!"),
                 false);
         }
         else
         {
-            editor.setText(
+            editor.setText(juce::String::fromUTF8(
                 "SHANTY SONAR EQ (Adamsky Music)\n"
                 "Dual-engine adaptive equalizer: SONAR (smart:EQ 4 style) + SMOOTH (resonance suppressor).\n\n"
                 "============================================================\n"
@@ -163,7 +164,7 @@ private:
                 "• Zero-Latency / Linear Phase: zero-latency tracking or linear-phase STFT processing.\n"
                 "• A / B: compare two parameter states.\n"
                 "• AUTO GAIN: automatic RMS loudness compensation.\n"
-                "• Shanty Mascot: reacts to learning, level, and resonance suppression. Pet her with your mouse!",
+                "• Shanty Mascot: reacts to learning, level, and resonance suppression. Pet her with your mouse!"),
                 false);
         }
         editor.setCaretPosition(0);
