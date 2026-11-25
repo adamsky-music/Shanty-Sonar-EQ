@@ -45,7 +45,7 @@ private:
 
     // Top bar
     juce::TextButton modeSonarBtn { "SONAR" };
-    juce::TextButton modeSootheBtn { "SOOTHE" };
+    juce::TextButton modeSootheBtn { "SMOOTH" };
     juce::ComboBox profileCombo, phaseModeCombo, sootheQualCombo;
     juce::TextButton learnBtn { "LEARN" };
     juce::TextButton clearLearnBtn { "CLR" };

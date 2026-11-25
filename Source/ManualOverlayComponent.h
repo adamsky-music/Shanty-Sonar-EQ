@@ -78,7 +78,7 @@ private:
         {
             editor.setText(
                 "SHANTY SONAR EQ (Adamsky Music)\n"
-                "Двухрежимный адаптивный эквалайзер: SONAR (аналог smart:EQ 4) + SOOTHE (аналог soothe2/3).\n\n"
+                "Двухрежимный адаптивный эквалайзер: SONAR (аналог smart:EQ 4) + SMOOTH (подавитель резонансов).\n\n"
                 "============================================================\n"
                 "1. РЕЖИМ SONAR (Адаптивная спектральная коррекция)\n"
                 "============================================================\n"
@@ -95,9 +95,9 @@ private:
                 "• Задайте приоритет: Foreground (вокал/лид), Midground (гитары/синты), Background (пэды/инструментал).\n"
                 "• Поверните UNMASK на более низком приоритете — плагин автоматически прорежет конфликтующие частоты (подсвечиваются красным на графике). Также работает через внешний Sidechain.\n\n"
                 "============================================================\n"
-                "3. РЕЖИМ SOOTHE (Подавитель резонансов)\n"
+                "3. РЕЖИМ SMOOTH (Подавитель резонансов)\n"
                 "============================================================\n"
-                "• Переключитесь кнопкой SOOTHE в шапке плагина.\n"
+                "• Переключитесь кнопкой SMOOTH в шапке плагина.\n"
                 "• DEPTH: глубина подавления острых резонансов (до -18 дБ).\n"
                 "• SHARP: ширина детектирования — от мягкого разгребания мути (слева) до узкого хирургического вырезания свиста (справа).\n"
                 "• SELECT: порог избирательности (подавлять только явные пики или сглаживать весь спектр).\n"
@@ -125,7 +125,7 @@ private:
         {
             editor.setText(
                 "SHANTY SONAR EQ (Adamsky Music)\n"
-                "Dual-engine adaptive equalizer: SONAR (smart:EQ 4 style) + SOOTHE (soothe2/3 style).\n\n"
+                "Dual-engine adaptive equalizer: SONAR (smart:EQ 4 style) + SMOOTH (resonance suppressor).\n\n"
                 "============================================================\n"
                 "1. SONAR MODE (Adaptive Spectral Shaping)\n"
                 "============================================================\n"
@@ -142,9 +142,9 @@ private:
                 "• Set Track Priority: Foreground (vocals/lead), Midground (guitars/keys), Background (pads/bus).\n"
                 "• Increase UNMASK on lower-priority tracks to carve space automatically (collision zones appear in red). External Sidechain is also supported.\n\n"
                 "============================================================\n"
-                "3. SOOTHE MODE (Dynamic Resonance Suppressor)\n"
+                "3. SMOOTH MODE (Dynamic Resonance Suppressor)\n"
                 "============================================================\n"
-                "• Switch to SOOTHE in the top bar.\n"
+                "• Switch to SMOOTH in the top bar.\n"
                 "• DEPTH: suppression depth (up to -18 dB on resonant peaks).\n"
                 "• SHARP: detection selectivity width — broad de-muddying (low) to laser-surgical whistle removal (high).\n"
                 "• SELECT: threshold selectivity (target only prominent spikes vs broader smoothing).\n"

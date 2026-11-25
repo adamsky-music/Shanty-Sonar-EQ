@@ -58,7 +58,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ShantySonarEQProcessor::crea
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "engine_mode", "Engine Mode",
-        juce::StringArray { "Sonar (smart:EQ)", "Soothe (Resonance)" }, 0));
+        juce::StringArray { "Sonar (smart:EQ)", "Smooth (Resonance)" }, 0));
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "profile", "Source Profile",
@@ -92,17 +92,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout ShantySonarEQProcessor::crea
         juce::StringArray { "Foreground", "Midground", "Background" }, 1));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "soothe_depth", "Soothe Depth", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 60.0f));
+        "soothe_depth", "Smooth Depth", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 60.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "soothe_sharpness", "Soothe Sharpness", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 50.0f));
+        "soothe_sharpness", "Smooth Sharpness", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 50.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "soothe_selectivity", "Soothe Selectivity", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 45.0f));
+        "soothe_selectivity", "Smooth Selectivity", juce::NormalisableRange<float>(0.0f, 100.0f, 0.5f), 45.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "soothe_attack", "Soothe Attack", juce::NormalisableRange<float>(0.5f, 50.0f, 0.5f, 0.45f), 5.0f));
+        "soothe_attack", "Smooth Attack", juce::NormalisableRange<float>(0.5f, 50.0f, 0.5f, 0.45f), 5.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "soothe_release", "Soothe Release", juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.45f), 80.0f));
+        "soothe_release", "Smooth Release", juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.45f), 80.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "soothe_quality", "Soothe Mode",
+        "soothe_quality", "Smooth Mode",
         juce::StringArray { "Soft", "Hard" }, 0));
     params.push_back(std::make_unique<juce::AudioParameterBool>("soothe_delta", "Delta Listen", false));
 

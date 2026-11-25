@@ -282,26 +282,26 @@ public:
         // 2. Seated Shanti body (new crisp sprite from Shanty Pawmper)
         g.drawImage(bodyFrame, destRect);
 
-        // 3. Happy eyes only when petted
+        // 3. Happy squinting "^ ^" eyes when petted (matched to latest Shanty Pawmper sprite)
         if (isHappy)
         {
             const float happyAlpha = juce::jmin(1.0f, petHappyTimer * 1.5f);
-            auto drawHappyEye = [&](float cxNorm, float cyNorm, float rx) {
+            auto drawHappyEye = [&](float cxNorm, float cyNorm, float rx, float ry) {
                 const float cx = destRect.getX() + cxNorm * destRect.getWidth();
                 const float cy = destRect.getY() + cyNorm * destRect.getHeight();
                 g.setColour(juce::Colour(0xFFF6F8FA).withAlpha(happyAlpha));
-                g.fillEllipse(cx - rx * 1.35f, cy - rx * 1.15f, rx * 2.7f, rx * 2.3f);
+                g.fillEllipse(cx - rx, cy - ry, rx * 2.0f, ry * 2.0f);
 
                 juce::Path arc;
-                arc.startNewSubPath(cx - rx * 1.1f, cy + rx * 0.25f);
-                arc.quadraticTo(cx, cy - rx * 0.95f, cx + rx * 1.1f, cy + rx * 0.25f);
+                arc.startNewSubPath(cx - rx * 0.80f, cy + ry * 0.22f);
+                arc.quadraticTo(cx, cy - ry * 0.82f, cx + rx * 0.80f, cy + ry * 0.22f);
                 g.setColour(juce::Colour(0xFF22252A).withAlpha(happyAlpha));
-                g.strokePath(arc, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.strokePath(arc, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             };
 
-            const float eyeR = destRect.getWidth() * 0.014f;
-            drawHappyEye(0.663f, 0.193f, eyeR);
-            drawHappyEye(0.742f, 0.184f, eyeR * 0.85f);
+            const float w = destRect.getWidth();
+            drawHappyEye(0.736f, 0.255f, w * 0.023f, w * 0.021f);
+            drawHappyEye(0.797f, 0.251f, w * 0.0135f, w * 0.020f);
         }
 
         // 4. Floating hearts
@@ -537,7 +537,12 @@ private:
         if (!rawSit.isValid())
             return;
 
-        auto fullSit = stripOuterWhiteBackground(rawSit, { { 0.595f, 0.780f } });
+        auto fullSit = stripOuterWhiteBackground(rawSit, {
+            { 0.555f, 0.822f },
+            { 0.565f, 0.815f },
+            { 0.545f, 0.828f },
+            { 0.575f, 0.825f }
+        });
 
         const int w = fullSit.getWidth();
         const int h = fullSit.getHeight();
@@ -551,11 +556,14 @@ private:
         juce::Image::BitmapData tailData(tailFrame, juce::Image::BitmapData::writeOnly);
         juce::Image::BitmapData glowData(collarGlowImage, juce::Image::BitmapData::writeOnly);
 
-        const int tailCutX = static_cast<int>(w * 0.320f);
-        const int tailCutY = static_cast<int>(h * 0.560f);
-        const int tailRootMinY = static_cast<int>(h * 0.780f);
-        const int tailRootMaxY = static_cast<int>(h * 0.875f);
-        const int tailOverlapPx = 14;
+        const int tailTipMaxX   = static_cast<int>(w * 0.285f);
+        const int tailTipMinY   = static_cast<int>(h * 0.520f);
+        const int tailRootMinY  = static_cast<int>(h * 0.795f);
+        const int tailRootMaxY  = static_cast<int>(h * 0.892f);
+        const int tailRootCutX  = static_cast<int>(w * 0.326f);
+        const int tailOverlapMinY = static_cast<int>(h * 0.810f);
+        const int tailOverlapMaxY = static_cast<int>(h * 0.865f);
+        const int tailOverlapPx = 8;
 
         double sumX = 0.0, sumY = 0.0;
         int count = 0;
@@ -570,14 +578,17 @@ private:
 
                 const auto c = brightenFurPixel(raw);
 
-                if (x < tailCutX && y > tailCutY)
+                const bool isTailTip  = (y >= tailTipMinY && y < tailRootMinY && x < tailTipMaxX);
+                const bool isTailRoot = (y >= tailRootMinY && y <= tailRootMaxY && x < tailRootCutX);
+
+                if (isTailTip || isTailRoot)
                 {
                     tailData.setPixelColour(x, y, c);
                 }
                 else
                 {
                     bodyData.setPixelColour(x, y, c);
-                    if (y >= tailRootMinY && y <= tailRootMaxY && x >= tailCutX && x < tailCutX + tailOverlapPx)
+                    if (y >= tailOverlapMinY && y <= tailOverlapMaxY && x >= tailRootCutX && x < tailRootCutX + tailOverlapPx)
                         tailData.setPixelColour(x, y, c);
                 }
 
