@@ -305,7 +305,8 @@ void ShantySonarEQEditor::timerCallback()
             btn.setColour(juce::TextButton::buttonColourId, ShantySonar::Palette::bgPanel);
     }
 
-    const bool isBypassed = (processor.apvts.getRawParameterValue("bypass")->load() > 0.5f);
+    const bool isBypassed = (processor.apvts.getRawParameterValue("bypass")->load() > 0.5f)
+                         || processor.isHostBypassed();
     const bool isDelta    = (processor.apvts.getRawParameterValue("soothe_delta")->load() > 0.5f);
     const float curFreq   = processor.getBandParams(currentBand).freq;
     const float freqNorm  = juce::jlimit(0.0f, 1.0f, std::log10(juce::jlimit(20.0f, 20000.0f, curFreq) / 20.0f) / 3.0f);

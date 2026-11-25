@@ -238,9 +238,16 @@ void ShantySonarEQProcessor::switchAB(int targetSlot)
     apvts.replaceState(abSlots[currentABSlot].createCopy());
 }
 
+void ShantySonarEQProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+{
+    hostBypassed.store(true, std::memory_order_relaxed);
+    AudioProcessor::processBlockBypassed(buffer, midiMessages);
+}
+
 void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+    hostBypassed.store(false, std::memory_order_relaxed);
 
     auto mainBus = getBusBuffer(buffer, true, 0);
     const int numSamples = mainBus.getNumSamples();

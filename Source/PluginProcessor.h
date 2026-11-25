@@ -17,6 +17,10 @@ public:
 
     bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    juce::AudioProcessorParameter* getBypassParameter() const override { return apvts.getParameter("bypass"); }
+
+    bool isHostBypassed() const noexcept { return hostBypassed.load(std::memory_order_relaxed); }
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
@@ -91,6 +95,7 @@ private:
     float autoGainLinear = 1.0f;
 
     std::atomic<int> soloBandIndex { -1 };
+    std::atomic<bool> hostBypassed { false };
 
     juce::ValueTree abSlots[2];
     int currentABSlot = 0;
