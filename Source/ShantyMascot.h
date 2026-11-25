@@ -112,8 +112,8 @@ public:
 
         const bool isHappy = (petHappyTimer > 0.01f);
 
-        // Curled-up sleeping Shanti when bypassed (unless petted)
-        if (isBypassed && !isHappy && sleepingFrame.isValid())
+        // Curled-up sleeping Shanti when bypassed (petting shows hearts without waking her)
+        if (isBypassed && sleepingFrame.isValid())
         {
             const auto drawArea = bounds.reduced(8.0f, 10.0f);
             const float imgW = static_cast<float>(sleepingFrame.getWidth());
@@ -167,6 +167,24 @@ public:
                 g.setColour(Palette::tailCyan.withAlpha(alpha));
                 g.setFont(juce::FontOptions(10.0f + 3.0f * cycle, juce::Font::bold));
                 g.drawText(k == 0 ? "z" : "Z", static_cast<int>(zx), static_cast<int>(zy), 14, 14, juce::Justification::centred);
+            }
+
+            // Floating hearts when petted in her sleep
+            for (const auto& h : hearts)
+            {
+                if (h.life > 0.01f)
+                {
+                    const float alpha = juce::jmin(1.0f, h.life * 1.4f);
+                    const float s = 5.5f;
+                    juce::Path heart;
+                    heart.startNewSubPath(h.x, h.y + s * 0.35f);
+                    heart.cubicTo(h.x - s, h.y - s * 0.4f, h.x - s * 0.5f, h.y - s * 1.1f, h.x, h.y - s * 0.45f);
+                    heart.cubicTo(h.x + s * 0.5f, h.y - s * 1.1f, h.x + s, h.y - s * 0.4f, h.x, h.y + s * 0.35f);
+                    heart.closeSubPath();
+
+                    g.setColour(Palette::teethRed.withAlpha(alpha));
+                    g.fillPath(heart);
+                }
             }
             return;
         }
