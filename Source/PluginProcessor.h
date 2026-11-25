@@ -40,7 +40,22 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    juce::UndoManager undoManager;
     juce::AudioProcessorValueTreeState apvts;
+
+    static juce::StringArray getFactoryPresetNames()
+    {
+        return {
+            "Default (Init)",
+            "Vocal Polish (SONAR)",
+            "Vocal De-Harsh (SMOOTH)",
+            "Kick & Bass Unmask",
+            "Master Silk",
+            "Mud Cleanup",
+            "Harsh Guitar Tamer"
+        };
+    }
+    void loadFactoryPreset(int presetIndex);
 
     // Smart Sonar controls
     void startLearn() { sonarEngine.startLearn(); }
@@ -134,6 +149,7 @@ private:
     std::atomic<float>* sootheSelectPtr = nullptr;
     std::atomic<float>* sootheAtkPtr = nullptr;
     std::atomic<float>* sootheRelPtr = nullptr;
+    std::atomic<float>* sootheMsBalPtr = nullptr;
     std::atomic<float>* sootheQualPtr = nullptr;
     std::atomic<float>* sootheDeltaPtr = nullptr;
     std::atomic<float>* autoGainPtr = nullptr;

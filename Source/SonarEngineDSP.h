@@ -262,6 +262,7 @@ public:
         float sootheSelectivity = 0.45f; // 0..1
         float sootheAttackMs = 5.0f;     // ms
         float sootheReleaseMs = 80.0f;   // ms
+        float sootheMsBalance = 0.0f;    // -1 (Mid) .. 0 (Balanced) .. +1 (Side)
         SootheQuality sootheQuality = SootheQuality::Soft;
     };
 
@@ -698,35 +699,85 @@ private:
         {
             const float binHz = static_cast<float>(sampleRate) / static_cast<float>(fftSize);
             const float synthScale = 1.0f / 1.5f; // exact Hann 75% overlap reconstruction
+            const bool useMS = (settings.engineMode == EngineMode::Soothe && numCh == 2 && std::abs(settings.sootheMsBalance) > 0.01f);
 
-            for (int ch = 0; ch < numCh; ++ch)
+            if (useMS)
             {
+                const float midW  = juce::jlimit(0.0f, 1.5f, 1.0f - settings.sootheMsBalance);
+                const float sideW = juce::jlimit(0.0f, 1.5f, 1.0f + settings.sootheMsBalance);
+
+                // Process Mid and Side separately in STFT domain
+                std::array<float, fftSize * 2> midWork {};
+                std::array<float, fftSize * 2> sideWork {};
                 for (int i = 0; i < fftSize; ++i)
                 {
                     const int idx = (ringWritePos + i) & (fftSize - 1);
-                    stftWorkspace[i] = inRing[ch][idx] * window[i];
+                    const float l = inRing[0][idx];
+                    const float r = inRing[1][idx];
+                    midWork[i]  = 0.5f * (l + r) * window[i];
+                    sideWork[i] = 0.5f * (l - r) * window[i];
                 }
-                std::fill(stftWorkspace.begin() + fftSize, stftWorkspace.end(), 0.0f);
-                fft.performRealOnlyForwardTransform(stftWorkspace.data());
+                fft.performRealOnlyForwardTransform(midWork.data());
+                fft.performRealOnlyForwardTransform(sideWork.data());
 
-                // Apply smart curve magnitude to complex bins
                 for (int k = 0; k <= fftSize / 2; ++k)
                 {
                     const float freq = juce::jmax(20.0f, static_cast<float>(k) * binHz);
-                    const float gainDb = interpCurve(workingSmart, freq);
-                    const float gainLin = std::pow(10.0f, gainDb / 20.0f);
-                    stftWorkspace[2 * k]     *= gainLin;
-                    stftWorkspace[2 * k + 1] *= gainLin;
+                    const float baseDb = interpCurve(workingSmart, freq);
+                    const float gMid  = std::pow(10.0f, (baseDb * midW) / 20.0f);
+                    const float gSide = std::pow(10.0f, (baseDb * sideW) / 20.0f);
+                    midWork[2 * k]      *= gMid;
+                    midWork[2 * k + 1]  *= gMid;
+                    sideWork[2 * k]     *= gSide;
+                    sideWork[2 * k + 1] *= gSide;
                 }
 
-                fft.performRealOnlyInverseTransform(stftWorkspace.data());
+                fft.performRealOnlyInverseTransform(midWork.data());
+                fft.performRealOnlyInverseTransform(sideWork.data());
 
                 for (int i = 0; i < fftSize; ++i)
                 {
                     const int idx = (ringWritePos + i) & (fftSize - 1);
-                    const float val = stftWorkspace[i] * window[i] * synthScale;
-                    if (std::isfinite(val))
-                        outRing[ch][idx] += val;
+                    const float m = midWork[i] * window[i] * synthScale;
+                    const float s = sideWork[i] * window[i] * synthScale;
+                    if (std::isfinite(m) && std::isfinite(s))
+                    {
+                        outRing[0][idx] += (m + s);
+                        outRing[1][idx] += (m - s);
+                    }
+                }
+            }
+            else
+            {
+                for (int ch = 0; ch < numCh; ++ch)
+                {
+                    for (int i = 0; i < fftSize; ++i)
+                    {
+                        const int idx = (ringWritePos + i) & (fftSize - 1);
+                        stftWorkspace[i] = inRing[ch][idx] * window[i];
+                    }
+                    std::fill(stftWorkspace.begin() + fftSize, stftWorkspace.end(), 0.0f);
+                    fft.performRealOnlyForwardTransform(stftWorkspace.data());
+
+                    // Apply smart curve magnitude to complex bins
+                    for (int k = 0; k <= fftSize / 2; ++k)
+                    {
+                        const float freq = juce::jmax(20.0f, static_cast<float>(k) * binHz);
+                        const float gainDb = interpCurve(workingSmart, freq);
+                        const float gainLin = std::pow(10.0f, gainDb / 20.0f);
+                        stftWorkspace[2 * k]     *= gainLin;
+                        stftWorkspace[2 * k + 1] *= gainLin;
+                    }
+
+                    fft.performRealOnlyInverseTransform(stftWorkspace.data());
+
+                    for (int i = 0; i < fftSize; ++i)
+                    {
+                        const int idx = (ringWritePos + i) & (fftSize - 1);
+                        const float val = stftWorkspace[i] * window[i] * synthScale;
+                        if (std::isfinite(val))
+                            outRing[ch][idx] += val;
+                    }
                 }
             }
         }
@@ -773,6 +824,48 @@ private:
             maxAbs = juce::jmax(maxAbs, std::abs(v));
         if (maxAbs < 0.05f)
             return;
+
+        const bool useMS = (settings.engineMode == EngineMode::Soothe && numCh == 2 && std::abs(settings.sootheMsBalance) > 0.01f);
+        if (useMS)
+        {
+            const float midW  = juce::jlimit(0.0f, 1.5f, 1.0f - settings.sootheMsBalance);
+            const float sideW = juce::jlimit(0.0f, 1.5f, 1.0f + settings.sootheMsBalance);
+            std::array<BiquadCoeffs, numMinPhaseBands> midCoeffs {}, sideCoeffs {};
+            for (int m = 0; m < numMinPhaseBands; ++m)
+            {
+                const float gDb = interpCurve(curveCopy, minPhaseFreqs[m]) * 0.52f;
+                if (m == 0)
+                {
+                    midCoeffs[m]  = BiquadCoeffs::makeLowShelf(sampleRate, minPhaseFreqs[m], 0.7, gDb * midW);
+                    sideCoeffs[m] = BiquadCoeffs::makeLowShelf(sampleRate, minPhaseFreqs[m], 0.7, gDb * sideW);
+                }
+                else if (m == numMinPhaseBands - 1)
+                {
+                    midCoeffs[m]  = BiquadCoeffs::makeHighShelf(sampleRate, minPhaseFreqs[m], 0.7, gDb * midW);
+                    sideCoeffs[m] = BiquadCoeffs::makeHighShelf(sampleRate, minPhaseFreqs[m], 0.7, gDb * sideW);
+                }
+                else
+                {
+                    midCoeffs[m]  = BiquadCoeffs::makeBell(sampleRate, minPhaseFreqs[m], 2.2, gDb * midW);
+                    sideCoeffs[m] = BiquadCoeffs::makeBell(sampleRate, minPhaseFreqs[m], 2.2, gDb * sideW);
+                }
+            }
+            float* lPtr = buffer.getWritePointer(0);
+            float* rPtr = buffer.getWritePointer(1);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float mVal = 0.5f * (lPtr[i] + rPtr[i]);
+                float sVal = 0.5f * (lPtr[i] - rPtr[i]);
+                for (int m = 0; m < numMinPhaseBands; ++m)
+                {
+                    mVal = minPhaseStates[0][m].process(mVal, midCoeffs[m]);
+                    sVal = minPhaseStates[1][m].process(sVal, sideCoeffs[m]);
+                }
+                lPtr[i] = mVal + sVal;
+                rPtr[i] = mVal - sVal;
+            }
+            return;
+        }
 
         std::array<BiquadCoeffs, numMinPhaseBands> coeffs {};
         for (int m = 0; m < numMinPhaseBands; ++m)

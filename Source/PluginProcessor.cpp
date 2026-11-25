@@ -6,7 +6,7 @@ ShantySonarEQProcessor::ShantySonarEQProcessor()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)
                      .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)),
-      apvts(*this, nullptr, "PARAMETERS", createParameterLayout())
+      apvts(*this, &undoManager, "PARAMETERS", createParameterLayout())
 {
     engineModePtr   = apvts.getRawParameterValue("engine_mode");
     profilePtr      = apvts.getRawParameterValue("profile");
@@ -24,6 +24,7 @@ ShantySonarEQProcessor::ShantySonarEQProcessor()
     sootheSelectPtr = apvts.getRawParameterValue("soothe_selectivity");
     sootheAtkPtr    = apvts.getRawParameterValue("soothe_attack");
     sootheRelPtr    = apvts.getRawParameterValue("soothe_release");
+    sootheMsBalPtr  = apvts.getRawParameterValue("soothe_ms_balance");
     sootheQualPtr   = apvts.getRawParameterValue("soothe_quality");
     sootheDeltaPtr  = apvts.getRawParameterValue("soothe_delta");
     autoGainPtr     = apvts.getRawParameterValue("auto_gain");
@@ -101,6 +102,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ShantySonarEQProcessor::crea
         "soothe_attack", "Smooth Attack", juce::NormalisableRange<float>(0.5f, 50.0f, 0.5f, 0.45f), 5.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "soothe_release", "Smooth Release", juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.45f), 80.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "soothe_ms_balance", "Smooth M/S Balance", juce::NormalisableRange<float>(-100.0f, 100.0f, 1.0f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "soothe_quality", "Smooth Mode",
         juce::StringArray { "Soft", "Hard" }, 0));
@@ -238,6 +241,126 @@ void ShantySonarEQProcessor::switchAB(int targetSlot)
     apvts.replaceState(abSlots[currentABSlot].createCopy());
 }
 
+void ShantySonarEQProcessor::loadFactoryPreset(int presetIndex)
+{
+    undoManager.beginNewTransaction("Load Preset");
+
+    auto setParam = [this](const juce::String& id, float realVal) {
+        if (auto* p = apvts.getParameter(id))
+            p->setValueNotifyingHost(p->convertTo0to1(realVal));
+    };
+
+    // Reset all bands first
+    for (int i = 0; i < ShantySonar::numBands; ++i)
+    {
+        setParam(bandParamID(i, "enabled"), 0.0f);
+        setParam(bandParamID(i, "type"), 0.0f);
+        setParam(bandParamID(i, "gain"), 0.0f);
+        setParam(bandParamID(i, "q"), 1.0f);
+        setParam(bandParamID(i, "ch_mode"), 0.0f);
+        setParam(bandParamID(i, "dyn_on"), 0.0f);
+    }
+
+    setParam("bypass", 0.0f);
+    setParam("soothe_delta", 0.0f);
+    setParam("mix", 100.0f);
+    setParam("output_gain", 0.0f);
+    setParam("auto_gain", 0.0f);
+    setParam("phase_mode", 0.0f);
+    setParam("sonar_min_freq", 30.0f);
+    setParam("sonar_max_freq", 18000.0f);
+    setParam("unmask_amt", 0.0f);
+    setParam("unmask_group", 0.0f);
+    setParam("soothe_ms_balance", 0.0f);
+
+    switch (presetIndex)
+    {
+        case 0: // Default (Init)
+            setParam("engine_mode", 0.0f);
+            setParam("profile", 0.0f);
+            setParam("sonar_impact", 75.0f);
+            setParam("sonar_smooth", 50.0f);
+            setParam("sonar_adaptive", 25.0f);
+            setParam("soothe_depth", 60.0f);
+            setParam("soothe_sharpness", 50.0f);
+            setParam("soothe_selectivity", 45.0f);
+            setParam("soothe_attack", 5.0f);
+            setParam("soothe_release", 80.0f);
+            setParam("soothe_quality", 0.0f);
+            break;
+
+        case 1: // Vocal Polish (SONAR)
+            setParam("engine_mode", 0.0f);
+            setParam("profile", 1.0f); // Vocals
+            setParam("sonar_impact", 80.0f);
+            setParam("sonar_smooth", 55.0f);
+            setParam("sonar_adaptive", 35.0f);
+            setParam("sonar_min_freq", 80.0f);
+            setParam(bandParamID(0, "enabled"), 1.0f);
+            setParam(bandParamID(0, "type"), 3.0f); // Low Cut
+            setParam(bandParamID(0, "freq"), 80.0f);
+            break;
+
+        case 2: // Vocal De-Harsh (SMOOTH)
+            setParam("engine_mode", 1.0f);
+            setParam("soothe_depth", 65.0f);
+            setParam("soothe_sharpness", 60.0f);
+            setParam("soothe_selectivity", 45.0f);
+            setParam("soothe_attack", 3.0f);
+            setParam("soothe_release", 60.0f);
+            setParam("soothe_ms_balance", -35.0f); // Focus on Mid
+            setParam("soothe_quality", 0.0f);
+            setParam("sonar_min_freq", 1800.0f);
+            setParam("sonar_max_freq", 16000.0f);
+            break;
+
+        case 3: // Kick & Bass Unmask
+            setParam("engine_mode", 0.0f);
+            setParam("profile", 3.0f); // Bass
+            setParam("sonar_impact", 70.0f);
+            setParam("sonar_adaptive", 40.0f);
+            setParam("unmask_group", 1.0f); // Group A
+            setParam("unmask_priority", 1.0f); // Midground
+            setParam("unmask_amt", 65.0f);
+            break;
+
+        case 4: // Master Silk
+            setParam("engine_mode", 1.0f);
+            setParam("phase_mode", 1.0f); // Linear Phase
+            setParam("auto_gain", 1.0f);
+            setParam("soothe_depth", 40.0f);
+            setParam("soothe_sharpness", 35.0f);
+            setParam("soothe_selectivity", 55.0f);
+            setParam("soothe_attack", 8.0f);
+            setParam("soothe_release", 110.0f);
+            setParam("soothe_quality", 0.0f);
+            break;
+
+        case 5: // Mud Cleanup
+            setParam("engine_mode", 1.0f);
+            setParam("soothe_depth", 70.0f);
+            setParam("soothe_sharpness", 25.0f);
+            setParam("soothe_selectivity", 35.0f);
+            setParam("soothe_attack", 10.0f);
+            setParam("soothe_release", 120.0f);
+            setParam("sonar_min_freq", 120.0f);
+            setParam("sonar_max_freq", 2000.0f);
+            break;
+
+        case 6: // Harsh Guitar Tamer
+            setParam("engine_mode", 1.0f);
+            setParam("soothe_depth", 60.0f);
+            setParam("soothe_sharpness", 65.0f);
+            setParam("soothe_selectivity", 50.0f);
+            setParam("soothe_attack", 4.0f);
+            setParam("soothe_release", 75.0f);
+            setParam("soothe_ms_balance", 25.0f); // Side-biased
+            setParam("sonar_min_freq", 1500.0f);
+            setParam("sonar_max_freq", 9000.0f);
+            break;
+    }
+}
+
 void ShantySonarEQProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     hostBypassed.store(true, std::memory_order_relaxed);
@@ -281,6 +404,7 @@ void ShantySonarEQProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     sSettings.sootheSelectivity = sootheSelectPtr->load() * 0.01f;
     sSettings.sootheAttackMs    = sootheAtkPtr->load();
     sSettings.sootheReleaseMs   = sootheRelPtr->load();
+    sSettings.sootheMsBalance   = sootheMsBalPtr->load() * 0.01f;
     sSettings.sootheQuality     = static_cast<ShantySonar::SootheQuality>(static_cast<int>(sootheQualPtr->load()));
     sonarEngine.updateSettings(sSettings);
 

@@ -26,9 +26,18 @@ public:
         repaint();
     }
 
+    void setFrozen(bool shouldFreeze) noexcept
+    {
+        frozen = shouldFreeze;
+        repaint();
+    }
+
+    bool isFrozen() const noexcept { return frozen; }
+
     void updateData()
     {
-        processor.copyDisplayData(preSpec, postSpec, smartCurve, maskingCurve);
+        if (!frozen)
+            processor.copyDisplayData(preSpec, postSpec, smartCurve, maskingCurve);
         repaint();
     }
 
@@ -77,6 +86,16 @@ public:
 
         // 7. Band Nodes
         drawBandNodes(g, plot);
+
+        if (frozen)
+        {
+            g.setColour(Palette::sonarCyan.withAlpha(0.22f));
+            g.fillRoundedRectangle(plot.getRight() - 62.0f, plot.getY() + 4.0f, 56.0f, 18.0f, 4.0f);
+            g.setColour(Palette::sonarCyan);
+            g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+            g.drawText("FROZEN", static_cast<int>(plot.getRight()) - 62, static_cast<int>(plot.getY()) + 4, 56, 18,
+                       juce::Justification::centred);
+        }
 
         g.setColour(Palette::borderSubtle);
         g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
@@ -211,6 +230,7 @@ private:
 
     ShantySonarEQProcessor& processor;
     int selectedBand = 0;
+    bool frozen = false;
 
     std::array<float, SonarEngineDSP::numBins> preSpec {};
     std::array<float, SonarEngineDSP::numBins> postSpec {};

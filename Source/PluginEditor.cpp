@@ -77,6 +77,34 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     scaleContainer.addAndMakeVisible(bypassBtn);
     bypassAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.apvts, "bypass", bypassBtn);
 
+    presetCombo.addItemList(ShantySonarEQProcessor::getFactoryPresetNames(), 1);
+    presetCombo.setTextWhenNothingSelected("Presets...");
+    presetCombo.onChange = [this] {
+        const int idx = presetCombo.getSelectedItemIndex();
+        if (idx >= 0)
+        {
+            processor.loadFactoryPreset(idx);
+            selectBand(currentBand);
+            updateModeVisibility();
+        }
+    };
+    scaleContainer.addAndMakeVisible(presetCombo);
+
+    undoBtn.setTooltip("Undo (Cmd+Z)");
+    undoBtn.onClick = [this] { processor.undoManager.undo(); updateModeVisibility(); };
+    scaleContainer.addAndMakeVisible(undoBtn);
+
+    redoBtn.setTooltip("Redo (Cmd+Shift+Z)");
+    redoBtn.onClick = [this] { processor.undoManager.redo(); updateModeVisibility(); };
+    scaleContainer.addAndMakeVisible(redoBtn);
+
+    freezeBtn.setClickingTogglesState(true);
+    freezeBtn.setTooltip("Freeze Spectrum Analyzer");
+    freezeBtn.onClick = [this] { spectrum.setFrozen(freezeBtn.getToggleState()); };
+    scaleContainer.addAndMakeVisible(freezeBtn);
+
+    setWantsKeyboardFocus(true);
+
     manualBtn.setTooltip(juce::String::fromUTF8("Open Manual / Руководство"));
     manualBtn.onClick = [this] {
         manualOverlay.setVisible(!manualOverlay.isVisible());
@@ -97,6 +125,7 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     setupKnob(sootheSelectSlider, sootheSelectLabel, "SELECT", "tail");
     setupKnob(sootheAtkSlider, sootheAtkLabel, "ATTACK", "amber");
     setupKnob(sootheRelSlider, sootheRelLabel, "RELEASE", "amber");
+    setupKnob(sootheMsBalSlider, sootheMsBalLabel, "M/S BAL", "tail", true);
 
     setupKnob(mixSlider, mixLabel, "MIX", "tail");
     setupKnob(outputSlider, outputLabel, "OUTPUT", "sonar", true);
@@ -110,6 +139,7 @@ ShantySonarEQEditor::ShantySonarEQEditor(ShantySonarEQProcessor& p)
     sootheSelectAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_selectivity", sootheSelectSlider);
     sootheAtkAtt    = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_attack", sootheAtkSlider);
     sootheRelAtt    = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_release", sootheRelSlider);
+    sootheMsBalAtt  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "soothe_ms_balance", sootheMsBalSlider);
     mixAtt          = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "mix", mixSlider);
     outputAtt       = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "output_gain", outputSlider);
 
@@ -250,6 +280,7 @@ void ShantySonarEQEditor::updateModeVisibility()
     sootheSelectSlider.setVisible(isSoothe); sootheSelectLabel.setVisible(isSoothe);
     sootheAtkSlider.setVisible(isSoothe);    sootheAtkLabel.setVisible(isSoothe);
     sootheRelSlider.setVisible(isSoothe);    sootheRelLabel.setVisible(isSoothe);
+    sootheMsBalSlider.setVisible(isSoothe);  sootheMsBalLabel.setVisible(isSoothe);
 
     modeSonarBtn.setColour(juce::TextButton::buttonColourId,
                            !isSoothe ? ShantySonar::Palette::sonarCyan.withAlpha(0.32f) : ShantySonar::Palette::bgPanel);
@@ -291,6 +322,11 @@ void ShantySonarEQEditor::timerCallback()
                        ab == 0 ? ShantySonar::Palette::sonarCyan.withAlpha(0.3f) : ShantySonar::Palette::bgPanel);
     slotBBtn.setColour(juce::TextButton::buttonColourId,
                        ab == 1 ? ShantySonar::Palette::sonarCyan.withAlpha(0.3f) : ShantySonar::Palette::bgPanel);
+
+    undoBtn.setEnabled(processor.undoManager.canUndo());
+    redoBtn.setEnabled(processor.undoManager.canRedo());
+    freezeBtn.setColour(juce::TextButton::buttonColourId,
+                        spectrum.isFrozen() ? ShantySonar::Palette::sonarCyan.withAlpha(0.30f) : ShantySonar::Palette::bgPanel);
 
     for (int i = 0; i < ShantySonar::numBands; ++i)
     {
@@ -386,23 +422,27 @@ void ShantySonarEQEditor::resized()
     const int h = baseHeight;
 
     // Top bar layout
-    int tx = 272;
-    modeSonarBtn.setBounds(tx, 12, 64, 28); tx += 66;
-    modeSootheBtn.setBounds(tx, 12, 68, 28); tx += 76;
+    int tx = 248;
+    modeSonarBtn.setBounds(tx, 12, 58, 28); tx += 60;
+    modeSootheBtn.setBounds(tx, 12, 64, 28); tx += 70;
 
-    profileCombo.setBounds(tx, 12, 120, 28);
-    learnBtn.setBounds(tx + 126, 12, 84, 28);
-    clearLearnBtn.setBounds(tx + 214, 12, 38, 28);
+    profileCombo.setBounds(tx, 12, 108, 28);
+    learnBtn.setBounds(tx + 112, 12, 76, 28);
+    clearLearnBtn.setBounds(tx + 192, 12, 34, 28);
 
-    sootheQualCombo.setBounds(tx, 12, 92, 28);
-    sootheDeltaBtn.setBounds(tx + 98, 12, 70, 28);
+    sootheQualCombo.setBounds(tx, 12, 84, 28);
+    sootheDeltaBtn.setBounds(tx + 90, 12, 64, 28);
 
-    phaseModeCombo.setBounds(w - 414, 12, 114, 28);
-    slotABtn.setBounds(w - 292, 12, 30, 28);
-    slotBBtn.setBounds(w - 260, 12, 30, 28);
-    autoGainBtn.setBounds(w - 222, 12, 84, 28);
-    bypassBtn.setBounds(w - 130, 12, 78, 28);
-    manualBtn.setBounds(w - 44, 12, 32, 28);
+    presetCombo.setBounds(614, 12, 116, 28);
+    undoBtn.setBounds(734, 12, 26, 28);
+    redoBtn.setBounds(762, 12, 26, 28);
+    freezeBtn.setBounds(792, 12, 40, 28);
+    phaseModeCombo.setBounds(836, 12, 104, 28);
+    slotABtn.setBounds(944, 12, 26, 28);
+    slotBBtn.setBounds(972, 12, 26, 28);
+    autoGainBtn.setBounds(1002, 12, 52, 28);
+    bypassBtn.setBounds(1058, 12, 46, 28);
+    manualBtn.setBounds(1108, 12, 26, 28);
 
     const int sideW = 248;
     const int bottomH = 166;
@@ -437,15 +477,16 @@ void ShantySonarEQEditor::resized()
     priorityCombo.setBounds(sx + 14 + (sideW - 22) / 2, ky, (sideW - 22) / 2, 24);
     ky += 30;
 
-    // Soothe knobs occupy the same sidebar region when Soothe mode is active
+    // Smooth knobs occupy the same sidebar region (3x2 grid) when Smooth mode is active
     int sky = sonarStartKy;
     const int kw3 = (sideW - 24) / 3;
-    placeKnob(sootheDepthSlider, sootheDepthLabel, sx + 6, sky, kw, kh);
-    placeKnob(sootheSharpSlider, sootheSharpLabel, sx + 12 + kw, sky, kw, kh);
-    sky += kh + 2;
-    placeKnob(sootheSelectSlider, sootheSelectLabel, sx + 6, sky, kw3, kh);
-    placeKnob(sootheAtkSlider, sootheAtkLabel, sx + 12 + kw3, sky, kw3, kh);
-    placeKnob(sootheRelSlider, sootheRelLabel, sx + 18 + kw3 * 2, sky, kw3, kh);
+    placeKnob(sootheDepthSlider, sootheDepthLabel, sx + 6, sky, kw3, kh);
+    placeKnob(sootheSharpSlider, sootheSharpLabel, sx + 12 + kw3, sky, kw3, kh);
+    placeKnob(sootheSelectSlider, sootheSelectLabel, sx + 18 + kw3 * 2, sky, kw3, kh);
+    sky += kh + 4;
+    placeKnob(sootheAtkSlider, sootheAtkLabel, sx + 6, sky, kw3, kh);
+    placeKnob(sootheRelSlider, sootheRelLabel, sx + 12 + kw3, sky, kw3, kh);
+    placeKnob(sootheMsBalSlider, sootheMsBalLabel, sx + 18 + kw3 * 2, sky, kw3, kh);
 
     const int remH = juce::jmax(58, (60 + mainH) - ky - 6);
     placeKnob(mixSlider, mixLabel, sx + 6, ky, kw, juce::jmin(72, remH));
@@ -488,4 +529,27 @@ void ShantySonarEQEditor::resized()
     placeKnob(dynRelSlider, dynRelLabel, dStart + (dKw + 4) * 3, knobY, dKw, knobH);
 
     manualOverlay.setBounds(0, 0, baseWidth, baseHeight);
+}
+
+bool ShantySonarEQEditor::keyPressed(const juce::KeyPress& key)
+{
+    if (key.getModifiers().isCommandDown())
+    {
+        if (key.getKeyCode() == 'z' || key.getKeyCode() == 'Z')
+        {
+            if (key.getModifiers().isShiftDown())
+                processor.undoManager.redo();
+            else
+                processor.undoManager.undo();
+            updateModeVisibility();
+            return true;
+        }
+        if (key.getKeyCode() == 'y' || key.getKeyCode() == 'Y')
+        {
+            processor.undoManager.redo();
+            updateModeVisibility();
+            return true;
+        }
+    }
+    return false;
 }

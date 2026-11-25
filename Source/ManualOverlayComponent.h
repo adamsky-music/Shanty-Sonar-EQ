@@ -103,6 +103,7 @@ private:
                 "• SHARP: ширина детектирования — от мягкого разгребания мути (слева) до узкого хирургического вырезания свиста (справа).\n"
                 "• SELECT: порог избирательности (подавлять только явные пики или сглаживать весь спектр).\n"
                 "• ATTACK / RELEASE: скорость срабатывания и восстановления.\n"
+                "• M/S BAL: баланс подавления между центром (Mid) и краями (Side).\n"
                 "• Soft / Hard: мягкое музыкальное или жёсткое хирургическое подавление.\n"
                 "• DELTA: прослушивание ТОЛЬКО вырезаемых резонансов.\n\n"
                 "============================================================\n"
@@ -117,6 +118,7 @@ private:
                 "5. ОБЩИЕ ФУНКЦИИ И ШАНТИ\n"
                 "============================================================\n"
                 "• Zero-Latency / Linear Phase: нулевая задержка для записи или линейно-фазовая STFT-обработка для сведения и мастеринга.\n"
+                "• Presets / < > (Undo/Redo, Cmd+Z) / FRZ (Freeze): готовые пресеты, история изменений и заморозка спектрограммы.\n"
                 "• A / B: мгновенное сравнение двух состояний настроек.\n"
                 "• AUTO GAIN: автоматическая компенсация громкости.\n"
                 "• Шанти-маскот: реагирует на сканирование, громкость и подавление резонансов. Погладьте её мышкой!"),
@@ -150,6 +152,7 @@ private:
                 "• SHARP: detection selectivity width — broad de-muddying (low) to laser-surgical whistle removal (high).\n"
                 "• SELECT: threshold selectivity (target only prominent spikes vs broader smoothing).\n"
                 "• ATTACK / RELEASE: envelope speed.\n"
+                "• M/S BAL: balance suppression between Mid (center) and Side (stereo width).\n"
                 "• Soft / Hard: transparent musical knee vs aggressive surgical suppression.\n"
                 "• DELTA: audition ONLY the resonances being removed.\n\n"
                 "============================================================\n"
@@ -162,6 +165,7 @@ private:
                 "5. GLOBAL CONTROLS & SHANTY\n"
                 "============================================================\n"
                 "• Zero-Latency / Linear Phase: zero-latency tracking or linear-phase STFT processing.\n"
+                "• Presets / < > (Undo/Redo, Cmd+Z) / FRZ (Freeze): factory presets, undo history, and spectrum freeze.\n"
                 "• A / B: compare two parameter states.\n"
                 "• AUTO GAIN: automatic RMS loudness compensation.\n"
                 "• Shanty Mascot: reacts to learning, level, and resonance suppression. Pet her with your mouse!"),

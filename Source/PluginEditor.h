@@ -19,6 +19,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void paintContent(juce::Graphics&);
+    bool keyPressed(const juce::KeyPress& key) override;
 
 private:
     static constexpr int baseWidth = 1140;
@@ -46,14 +47,17 @@ private:
     // Top bar
     juce::TextButton modeSonarBtn { "SONAR" };
     juce::TextButton modeSootheBtn { "SMOOTH" };
-    juce::ComboBox profileCombo, phaseModeCombo, sootheQualCombo;
+    juce::ComboBox profileCombo, phaseModeCombo, sootheQualCombo, presetCombo;
     juce::TextButton learnBtn { "LEARN" };
     juce::TextButton clearLearnBtn { "CLR" };
     juce::TextButton sootheDeltaBtn { "DELTA" };
+    juce::TextButton undoBtn { "<" };
+    juce::TextButton redoBtn { ">" };
+    juce::TextButton freezeBtn { "FRZ" };
     juce::TextButton slotABtn { "A" };
     juce::TextButton slotBBtn { "B" };
-    juce::TextButton autoGainBtn { "AUTO GAIN" };
-    juce::TextButton bypassBtn { "BYPASS" };
+    juce::TextButton autoGainBtn { "AUTO" };
+    juce::TextButton bypassBtn { "BYP" };
     juce::TextButton manualBtn { "?" };
 
     ShantySonar::ManualOverlayComponent manualOverlay;
@@ -63,8 +67,8 @@ private:
     juce::Label impactLabel, smoothLabel, adaptiveLabel, unmaskLabel;
     juce::ComboBox groupCombo, priorityCombo;
 
-    juce::Slider sootheDepthSlider, sootheSharpSlider, sootheSelectSlider, sootheAtkSlider, sootheRelSlider;
-    juce::Label sootheDepthLabel, sootheSharpLabel, sootheSelectLabel, sootheAtkLabel, sootheRelLabel;
+    juce::Slider sootheDepthSlider, sootheSharpSlider, sootheSelectSlider, sootheAtkSlider, sootheRelSlider, sootheMsBalSlider;
+    juce::Label sootheDepthLabel, sootheSharpLabel, sootheSelectLabel, sootheAtkLabel, sootheRelLabel, sootheMsBalLabel;
 
     juce::Slider mixSlider, outputSlider;
     juce::Label mixLabel, outputLabel;
@@ -88,7 +92,7 @@ private:
     // Global APVTS Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> profileAtt, phaseModeAtt, groupAtt, priorityAtt, sootheQualAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> impactAtt, smoothAtt, adaptiveAtt, unmaskAtt, mixAtt, outputAtt;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sootheDepthAtt, sootheSharpAtt, sootheSelectAtt, sootheAtkAtt, sootheRelAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sootheDepthAtt, sootheSharpAtt, sootheSelectAtt, sootheAtkAtt, sootheRelAtt, sootheMsBalAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt, bypassAtt, sootheDeltaAtt;
 
     // Per-band dynamic APVTS Attachments
