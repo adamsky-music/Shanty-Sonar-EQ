@@ -35,15 +35,6 @@ public:
         isDeltaMode   = deltaMode && sootheMode && !bypassed;
         animTimeSec += 1.0f / 60.0f;
 
-        sleepTwitchTimer -= 1.0f / 60.0f;
-        if (sleepTwitchTimer <= 0.0f)
-        {
-            sleepTwitchProgress = 1.0f;
-            sleepTwitchTimer = 3.2f + 1.8f * std::abs(std::sin(animTimeSec * 0.7f));
-        }
-        if (sleepTwitchProgress > 0.0f)
-            sleepTwitchProgress = juce::jmax(0.0f, sleepTwitchProgress - (1.0f / 60.0f) * 3.5f);
-
         lickTimer -= 1.0f / 60.0f;
         if (lickTimer <= 0.0f)
         {
@@ -155,7 +146,6 @@ public:
             }
 
             const float breath = std::sin(animTimeSec * 1.55f);
-            const float twitch = std::sin(sleepTwitchProgress * juce::MathConstants<float>::pi * 4.0f) * sleepTwitchProgress;
             const float scaleY = 1.0f + 0.018f * breath;
             const float scaleX = 1.0f - 0.008f * breath;
             const float anchorX = destRect.getCentreX();
@@ -164,9 +154,7 @@ public:
             g.setOpacity(1.0f);
             {
                 juce::Graphics::ScopedSaveState ss(g);
-                g.addTransform(juce::AffineTransform::scale(scaleX, scaleY, anchorX, anchorY)
-                                   .rotated(twitch * 0.025f, destRect.getX() + destRect.getWidth() * 0.72f,
-                                            destRect.getY() + destRect.getHeight() * 0.45f));
+                g.addTransform(juce::AffineTransform::scale(scaleX, scaleY, anchorX, anchorY));
                 g.drawImage(sleepingFrame, destRect);
             }
 
@@ -367,8 +355,6 @@ private:
     bool isDeltaMode    = false;
     float animTimeSec   = 0.0f;
 
-    float sleepTwitchTimer = 2.0f;
-    float sleepTwitchProgress = 0.0f;
     float lickTimer = 1.2f;
     float lickProgress = 0.0f;
     bool isBeingPetted = false;
